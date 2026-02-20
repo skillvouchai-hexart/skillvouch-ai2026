@@ -168,7 +168,7 @@ Generate exactly 5 high-quality, skill-specific questions.`;
     const prompt = this.generatePrompt(skillName, level);
 
     try {
-      const response = await fetch(`${API_BASE}/mistral/generate-quiz`, {
+      const response = await fetch(`${API_BASE}/quiz/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

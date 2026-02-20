@@ -169,70 +169,43 @@ This project is designed to work on:
    The frontend will be available at `http://localhost:5173`
    The backend API will be available at `http://localhost:3000`
 
-## 🚀 Deployment
-### 🌟 **EASIEST OPTION: Vercel + GitHub (Recommended)**
+## �� Available Scripts
 
-## 📋 **Step-by-Step Process**
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
 
-### **Step 1: Prepare Your Repository**
-```bash
-# Make sure your code is pushed to GitHub
-git add .
-git commit -m "Ready for deployment"
-git push origin main
-```
+## 📝 Environment Variables
 
-### **Step 2: Sign up for Vercel**
-1. Go to [vercel.com](https://vercel.com)
-2. Click "Sign Up"
-3. Choose "Continue with GitHub"
-4. Authorize Vercel to access your GitHub account
+### Required API Keys
 
-### **Step 3: Import Your Repository**
-1. Click "New Project" on Vercel dashboard
-2. Find your repository: `nitinmeruva2005/SkillVouch-Hexart`
-3. Click "Import"
-4. Vercel will automatically detect:
-   - Framework: React + Vite
-   - Build Command: `npm run build`
-   - Output Directory: `dist`
-   - Install Command: `npm install`
+1. **Mistral AI API Key:**
+   - Get your key from: https://console.mistral.ai/
+   - Used for quiz generation
 
-### **Step 4: Configure Environment Variables**
-1. In Vercel project, click "Settings" tab
-2. Click "Environment Variables" in left menu
-3. Add these variables one by one:
+### Database Configuration
 
-```bash
-# Frontend Variables
-VITE_MISTRAL_API_KEY=your-mistral-api-key-here
+Make sure your MySQL server is running and the database credentials in `backend/.env` are correct.
 
-# Backend Variables
+## 🤝 Contributing
 
-MISTRAL_API_KEY=your-mistral-api-key-here
-```
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### **Step 5: Deploy**
-1. Click "Deploy" button
-2. Wait for build to complete (2-3 minutes)
-3. Your app is now live! 🎉
+## 📄 License
 
-### **Step 6: Verify Deployment**
-1. Visit your live URL: `https://skillvouch-hexart.vercel.app`
-2. Test all features:
-   - Homepage loads
-   - Quiz generation works
-   - API endpoints respond
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-### **Step 7: Future Updates**
-```bash
-# Any changes you push will auto-deploy
-git add .
-git commit -m "Update feature"
-git push origin main
+## 🆘 Support
 
-# Or manual redeploy
-vercel --prod
-```
+If you encounter any issues or have questions, please:
+- Check the existing issues
+- Create a new issue with detailed information
+- Include your environment details and error messages
 
-## 🔧 **Database Setup for Production**
+---
+
+**Note:** This project uses AI services that may require API keys with associated costs. Please check the pricing details for each service before usage.

@@ -1,6 +1,10 @@
 import { User } from '../types';
 import { apiService } from './apiService';
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
+
 interface PeerRecommendationRequest {
   userId: string;
   skillsToLearn: string[];
@@ -32,7 +36,7 @@ export const peerRecommendationService = {
   getPeerRecommendations: async (request: PeerRecommendationRequest): Promise<PeerRecommendationResponse> => {
     try {
       // Call the backend API for peer recommendations
-      const response = await fetch('/api/peer-recommendations', {
+      const response = await fetch(`${API_BASE}/peer-recommendations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request)
@@ -45,7 +49,7 @@ export const peerRecommendationService = {
       return await response.json();
     } catch (error) {
       console.error('Peer recommendation error:', error);
-      
+
       // Fallback to client-side filtering if API fails
       return await peerRecommendationService.getFallbackRecommendations(request);
     }
@@ -54,13 +58,13 @@ export const peerRecommendationService = {
   // Fallback client-side recommendation logic
   getFallbackRecommendations: async (request: PeerRecommendationRequest): Promise<PeerRecommendationResponse> => {
     console.log('🔍 Getting fallback recommendations for:', request);
-    
+
     const allUsers = await apiService.getUsers();
     console.log('📊 Total users in database:', allUsers.length);
-    
+
     const currentUser = allUsers.find(u => u.id === request.userId);
     console.log('👤 Current user:', currentUser ? currentUser.name : 'Not found');
-    
+
     if (!currentUser) {
       return {
         language: 'en',
@@ -78,15 +82,15 @@ export const peerRecommendationService = {
 
     for (const user of otherUsers) {
       console.log(`🔍 Checking user: ${user.name}, skillsKnown:`, user.skillsKnown);
-      
+
       for (const skill of user.skillsKnown) {
         console.log(`  📚 Skill: ${skill.name}, verified: ${skill.verified}, looking for: ${request.skillsToLearn}`);
-        
+
         if (request.skillsToLearn.includes(skill.name) && skill.verified) {
           console.log(`  ✅ Match found! ${skill.name} is verified`);
-          
+
           // Check language compatibility
-          const languageMatch = !request.preferredLanguage || 
+          const languageMatch = !request.preferredLanguage ||
             user.languages?.includes(request.preferredLanguage) ||
             user.languages?.includes('en'); // Default to English
 
@@ -135,7 +139,7 @@ export const peerRecommendationService = {
     return {
       language: request.preferredLanguage || 'en',
       recommendedPeers: topPeers,
-      message: topPeers.length > 0 
+      message: topPeers.length > 0
         ? `Found ${topPeers.length} verified peer(s) matching your requirements.`
         : 'No verified peers currently match your requirements. You will be notified once a match becomes available.'
     };
@@ -164,7 +168,7 @@ export const peerRecommendationService = {
 
     // Availability overlap (25 points)
     if (currentUser.availability && peerUser.availability) {
-      const overlap = currentUser.availability.filter(time => 
+      const overlap = currentUser.availability.filter(time =>
         peerUser.availability!.includes(time)
       ).length;
       const maxSlots = Math.max(currentUser.availability.length, peerUser.availability.length);

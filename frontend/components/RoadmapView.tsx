@@ -22,6 +22,10 @@ interface RoadmapStep {
   projects: string[];
 }
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
+
 const getResourceIcon = (type: string) => {
   switch (type) {
     case 'documentation':
@@ -45,7 +49,7 @@ export const RoadmapView: React.FC = () => {
     setLoading(true);
     setRoadmapData(null);
     try {
-      const response = await fetch('/api/learning/roadmap', {
+      const response = await fetch(`${API_BASE}/learning/roadmap`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,7 +92,7 @@ export const RoadmapView: React.FC = () => {
             className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
           />
         </div>
-        
+
         <button
           onClick={handleGenerate}
           disabled={loading || !skillInput}
@@ -119,16 +123,16 @@ export const RoadmapView: React.FC = () => {
             <div key={idx} className="relative pl-8">
               {/* Dot */}
               <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-indigo-500 border-4 border-white dark:border-slate-950 shadow-[0_0_10px_rgba(99,102,241,0.5)]"></div>
-              
+
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 hover:border-slate-300 dark:hover:border-slate-600 transition">
                 <div className="flex flex-col md:flex-row md:items-center justify-between mb-2">
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-1 md:mb-0">Step {item.step}: {item.title}</h3>
-                    <span className="text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-full w-fit">
-                        {item.duration}
-                    </span>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-1 md:mb-0">Step {item.step}: {item.title}</h3>
+                  <span className="text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-full w-fit">
+                    {item.duration}
+                  </span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 mb-4">{item.description}</p>
-                
+
                 {/* Topics */}
                 {item.topics && item.topics.length > 0 && (
                   <div className="mb-4">
@@ -142,28 +146,28 @@ export const RoadmapView: React.FC = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Dynamic Resources */}
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-lg border border-slate-200 dark:border-slate-800/50">
-                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-500 mb-3 uppercase tracking-wide">Learning Resources:</p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {item.resources.map((res, i) => (
-                            <a 
-                                key={i}
-                                href={res.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-start text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
-                            >
-                                {getResourceIcon(res.type)}
-                                <div className="flex-1">
-                                    <div className="font-medium">{res.title}</div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400 capitalize">{res.type}</div>
-                                </div>
-                                <ExternalLink className="w-3 h-3 ml-2 mt-1 flex-shrink-0" />
-                            </a>
-                        ))}
-                    </div>
+                  <p className="text-sm font-semibold text-slate-600 dark:text-slate-500 mb-3 uppercase tracking-wide">Learning Resources:</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {item.resources.map((res, i) => (
+                      <a
+                        key={i}
+                        href={res.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                      >
+                        {getResourceIcon(res.type)}
+                        <div className="flex-1">
+                          <div className="font-medium">{res.title}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 capitalize">{res.type}</div>
+                        </div>
+                        <ExternalLink className="w-3 h-3 ml-2 mt-1 flex-shrink-0" />
+                      </a>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Projects */}

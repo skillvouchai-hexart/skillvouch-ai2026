@@ -16,6 +16,10 @@ interface QuizResponse {
   questions: QuizQuestion[];
 }
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
+
 type SkillCategory = 'Technical' | 'Creative' | 'Academic' | 'Vocational' | 'Soft Skill';
 type DifficultyLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
 
@@ -96,7 +100,7 @@ class SkillAssessmentEngine {
 
   private detectSkillDomain(skillName: string): string {
     const lowerSkill = skillName.toLowerCase();
-    
+
     const domainKeywords: Record<string, string[]> = {
       programming: ['javascript', 'python', 'java', 'react', 'css', 'html', 'sql', 'programming', 'coding', 'software', 'development', 'algorithm', 'data', 'system', 'network', 'database', 'api', 'frontend', 'backend'],
       cooking: ['cooking', 'culinary', 'food', 'recipe', 'kitchen', 'baking', 'chef', 'meal', 'ingredient', 'flavor', 'cuisine', 'dish', 'restaurant'],
@@ -126,7 +130,7 @@ class SkillAssessmentEngine {
     const disambiguatedSkill = this.disambiguateSkill(skillName);
     const domain = this.detectSkillDomain(skillName);
     const basePrompt = this.DOMAIN_PROMPTS[domain]?.[level] || this.DOMAIN_PROMPTS.general[level];
-    
+
     return `${basePrompt.replace('{SKILL_NAME}', disambiguatedSkill)}
 
 CRITICAL REQUIREMENTS:
@@ -162,12 +166,12 @@ Generate exactly 5 high-quality, skill-specific questions.`;
 
   async generateQuiz(skillName: string, category: SkillCategory, level: DifficultyLevel): Promise<QuizResponse> {
     const prompt = this.generatePrompt(skillName, level);
-    
+
     try {
-      const response = await fetch('/api/mistral/generate-quiz', {
+      const response = await fetch(`${API_BASE}/mistral/generate-quiz`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           prompt,
           skillName,
           level,
@@ -180,7 +184,7 @@ Generate exactly 5 high-quality, skill-specific questions.`;
       }
 
       const result = await response.json();
-      
+
       if (!result.questions || !Array.isArray(result.questions) || result.questions.length !== 5) {
         throw new Error('Invalid response format');
       }
@@ -219,12 +223,12 @@ Generate exactly 5 high-quality, skill-specific questions.`;
     }
 
     return response.questions.every((q: any) => {
-      return q.question && 
-             q.options && 
-             typeof q.options === 'object' &&
-             ['A', 'B', 'C', 'D'].every(key => key in q.options) &&
-             ['A', 'B', 'C', 'D'].includes(q.correctAnswer) &&
-             q.subSkill;
+      return q.question &&
+        q.options &&
+        typeof q.options === 'object' &&
+        ['A', 'B', 'C', 'D'].every(key => key in q.options) &&
+        ['A', 'B', 'C', 'D'].includes(q.correctAnswer) &&
+        q.subSkill;
     });
   }
 }

@@ -1,12 +1,16 @@
 import { QuizQuestion, RoadmapItem, User } from "../types";
 import { apiService } from "./apiService";
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
+
 type QuizDifficulty = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 
 // Enhanced skill domain detection with improved specificity
 const detectSkillDomain = (skillName: string): string => {
   const lowerSkill = skillName.toLowerCase();
-  
+
   // Exact matching first - prioritize specific skill names over partial matches
   const exactMatches: Record<string, string[]> = {
     cooking: ['cooking', 'culinary arts', 'food preparation', 'meal preparation'],
@@ -39,14 +43,14 @@ const detectSkillDomain = (skillName: string): string => {
     blockchain: ['blockchain', 'cryptocurrency', 'web3', 'defi'],
     speaking: ['public speaking', 'presentation skills', 'speech']
   };
-  
+
   // Check exact matches first
   for (const [domain, skills] of Object.entries(exactMatches)) {
     if (skills.includes(lowerSkill)) {
       return domain;
     }
   }
-  
+
   // Then check partial matches with higher specificity
   const domains = {
     cooking: ['chef', 'food', 'recipe', 'kitchen', 'grilling', 'frying', 'roasting', 'sous vide', 'fermentation', 'canning', 'preserving', 'meal', 'cook', 'culinary'],
@@ -78,11 +82,11 @@ const detectSkillDomain = (skillName: string): string => {
     negotiation: ['negotiation', 'persuasion', 'influence', 'bargaining', 'conflict resolution'],
     decision: ['decision', 'making', 'judgment', 'strategy', 'choices', 'analysis']
   };
-  
+
   // Find the domain with the most matching keywords (longest match wins)
   let bestDomain = 'general';
   let bestScore = 0;
-  
+
   for (const [domain, keywords] of Object.entries(domains)) {
     let score = 0;
     for (const keyword of keywords) {
@@ -95,14 +99,14 @@ const detectSkillDomain = (skillName: string): string => {
       bestDomain = domain;
     }
   }
-  
+
   return bestDomain;
 };
 
 // Generate comprehensive skill-specific questions using Mistral
 const generateSkillQuestions = async (skillName: string, difficulty: QuizDifficulty): Promise<QuizQuestion[]> => {
   const domain = detectSkillDomain(skillName);
-  
+
   const domainPrompts = {
     cooking: {
       expert: `Generate 5 EXPERT-LEVEL multiple-choice questions about "${skillName}" ONLY. Focus exclusively on CULINARY and CUISINE topics: advanced cooking techniques, international cuisines, flavor profiles, ingredient pairing, food science, professional kitchen operations, culinary arts, regional specialties, cooking methods, food chemistry, and gastronomy. DO NOT include programming, technology, or unrelated topics. Each question must test deep culinary knowledge that only experienced chefs or culinary experts would know.
@@ -486,44 +490,44 @@ Generate exactly 5 high-quality, skill-specific questions.`
   };
 
   const prompt = domainPrompts[domain]?.[difficulty] || domainPrompts.general[difficulty];
-  
+
   try {
-    const response = await fetch('/api/mistral/generate-quiz', {
+    const response = await fetch(`${API_BASE}/mistral/generate-quiz`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         prompt,
         skillName,
         difficulty,
         domain
       })
     });
-    
+
     if (!response.ok) {
       throw new Error(`Mistral API error: ${response.status}`);
     }
-    
+
     const data = await response.json();
-    
+
     // Validate the new strict JSON format
     if (!data.skill || !data.level || !Array.isArray(data.questions) || data.questions.length !== 5) {
       throw new Error('Invalid response format from Mistral API - missing required fields');
     }
-    
+
     // Validate each question structure according to new format
-    const validQuestions = data.questions.filter((q: any) => 
-      q.question && 
-      q.options && 
+    const validQuestions = data.questions.filter((q: any) =>
+      q.question &&
+      q.options &&
       typeof q.options === 'object' &&
       ['A', 'B', 'C', 'D'].every(key => key in q.options) &&
       ['A', 'B', 'C', 'D'].includes(q.correctAnswer) &&
       q.subSkill
     );
-    
+
     if (validQuestions.length !== 5) {
       throw new Error(`Invalid question structure. Expected 5 valid questions, got ${validQuestions.length}`);
     }
-    
+
     // Convert to QuizQuestion format for compatibility
     return validQuestions.map((q: any) => ({
       question: q.question,
@@ -531,7 +535,7 @@ Generate exactly 5 high-quality, skill-specific questions.`
       correctAnswerIndex: ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer),
       codeSnippet: q.codeSnippet || null
     })) as QuizQuestion[];
-    
+
   } catch (error) {
     console.error('Mistral quiz generation failed:', error);
     throw new Error(`Failed to generate quiz for ${skillName}: ${error.message}`);
@@ -541,13 +545,13 @@ Generate exactly 5 high-quality, skill-specific questions.`
 // 1. Generate Quiz using Mistral with comprehensive skill coverage
 export const generateQuiz = async (skillName: string, difficulty: QuizDifficulty = 'expert'): Promise<QuizQuestion[]> => {
   console.log(`Generating ${difficulty} quiz for skill: ${skillName}`);
-  
+
   try {
     // Try enhanced Mistral generation first
     return await generateSkillQuestions(skillName, difficulty);
   } catch (error) {
     console.error('Enhanced Mistral generation failed, falling back to API service:', error);
-    
+
     // Fallback to existing API service
     try {
       const response = await apiService.generateQuiz(skillName, difficulty);
@@ -562,7 +566,7 @@ export const generateQuiz = async (skillName: string, difficulty: QuizDifficulty
 // 2. Generate Learning Roadmap with Mistral via backend API
 export const generateRoadmap = async (skillName: string): Promise<RoadmapItem[]> => {
   try {
-    const response = await fetch('/api/roadmap/generate', {
+    const response = await fetch(`${API_BASE}/roadmap/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ skillName })
@@ -581,7 +585,7 @@ export const generateRoadmap = async (skillName: string): Promise<RoadmapItem[]>
         duration: "1-2 weeks",
         resources: [
           "Official documentation",
-          "Beginner tutorials", 
+          "Beginner tutorials",
           "Practice exercises"
         ]
       },
@@ -645,9 +649,9 @@ export const generateRoadmap = async (skillName: string): Promise<RoadmapItem[]>
 };
 
 // 3. Suggest Skills with Mistral via backend API - Enhanced with detailed recommendations
-export const suggestSkills = async (currentSkills: string[], currentGoals: string[] = []): Promise<{skills: string[], recommendations?: Record<string, string>, categories?: Record<string, string>}> => {
+export const suggestSkills = async (currentSkills: string[], currentGoals: string[] = []): Promise<{ skills: string[], recommendations?: Record<string, string>, categories?: Record<string, string> }> => {
   try {
-    const response = await fetch('/api/skills/suggest', {
+    const response = await fetch(`${API_BASE}/skills/suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentSkills, currentGoals })
@@ -664,32 +668,32 @@ export const suggestSkills = async (currentSkills: string[], currentGoals: strin
       'HTML/CSS', 'SQL', 'Git', 'Docker', 'AWS',
       'Machine Learning', 'Data Analysis', 'DevOps', 'Kubernetes', 'REST APIs',
       'Cybersecurity', 'Cloud Computing', 'Mobile Development', 'Blockchain', 'AI/ML',
-      
+
       // Life-Based Topics
       'Public Speaking', 'Time Management', 'Leadership', 'Communication Skills',
       'Financial Literacy', 'Stress Management', 'Critical Thinking', 'Problem Solving',
       'Team Collaboration', 'Project Planning', 'Negotiation', 'Decision Making'
     ];
-    
+
     // Filter out skills user already knows and return 5 random ones
-    const availableSkills = fallbackSkills.filter(skill => 
+    const availableSkills = fallbackSkills.filter(skill =>
       !currentSkills.some(known => known.toLowerCase() === skill.toLowerCase())
     );
-    
+
     // Shuffle and take 5
     const shuffled = availableSkills.sort(() => 0.5 - Math.random());
     const selectedSkills = shuffled.slice(0, 5);
-    
+
     // Generate basic recommendations for fallback
     const recommendations: Record<string, string> = {};
     const categories: Record<string, string> = {};
-    
+
     selectedSkills.forEach(skill => {
       recommendations[skill] = `Build upon your existing skills with ${skill}`;
-      categories[skill] = skill.includes('JavaScript') || skill.includes('Python') || skill.includes('React') ? 'Technical' : 
-                        skill.includes('Speaking') || skill.includes('Leadership') || skill.includes('Communication') ? 'Professional' : 'General';
+      categories[skill] = skill.includes('JavaScript') || skill.includes('Python') || skill.includes('React') ? 'Technical' :
+        skill.includes('Speaking') || skill.includes('Leadership') || skill.includes('Communication') ? 'Professional' : 'General';
     });
-    
+
     return {
       skills: selectedSkills,
       recommendations,
@@ -705,13 +709,13 @@ export const analyzeMatch = async (user1: User, user2: User): Promise<{ score: n
   const commonSkills = user1.skillsKnown
     .filter(skill1 => user2.skillsToLearn.includes(skill1.name))
     .map(skill => skill.name);
-  
-  const user1Wants = user1.skillsToLearn.filter(skill => 
+
+  const user1Wants = user1.skillsToLearn.filter(skill =>
     user2.skillsKnown.some(known => known.name === skill)
   );
-  
+
   const score = (commonSkills.length + user1Wants.length) * 10;
-  
+
   return {
     score: Math.min(score, 100),
     reasoning: `Compatibility based on ${commonSkills.length} matching skills and ${user1Wants.length} learning opportunities`,

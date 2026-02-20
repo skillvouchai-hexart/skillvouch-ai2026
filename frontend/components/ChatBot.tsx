@@ -3,6 +3,10 @@ import { MessageCircle, Send, X, Bot, User } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { peerRecommendationService } from '../services/peerRecommendationService';
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
+
 interface ChatMessage {
   id: string;
   text: string;
@@ -41,19 +45,19 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onToggle }) => {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     const lowerMessage = userMessage.toLowerCase();
-    
+
     // AI SQL Query Generation - Database-only approach
-    if (lowerMessage.includes('show') || lowerMessage.includes('find') || 
-        lowerMessage.includes('list') || lowerMessage.includes('get') ||
-        lowerMessage.includes('sql') || lowerMessage.includes('c') || 
-        lowerMessage.includes('python') || lowerMessage.includes('peers') ||
-        lowerMessage.includes('students') || lowerMessage.includes('experts') ||
-        lowerMessage.includes('beginners') || lowerMessage.includes('advanced') ||
-        lowerMessage.includes('all')) {
-      
+    if (lowerMessage.includes('show') || lowerMessage.includes('find') ||
+      lowerMessage.includes('list') || lowerMessage.includes('get') ||
+      lowerMessage.includes('sql') || lowerMessage.includes('c') ||
+      lowerMessage.includes('python') || lowerMessage.includes('peers') ||
+      lowerMessage.includes('students') || lowerMessage.includes('experts') ||
+      lowerMessage.includes('beginners') || lowerMessage.includes('advanced') ||
+      lowerMessage.includes('all')) {
+
       try {
         // Step 1: Generate SQL query from user message
-        const sqlResponse = await fetch('/api/ai-sql-query', {
+        const sqlResponse = await fetch(`${API_BASE}/ai-sql-query`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userMessage })
@@ -64,13 +68,13 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onToggle }) => {
         }
 
         const sqlData = await sqlResponse.json();
-        
+
         if (sqlData.intent === 'unclear') {
           return sqlData.responseText;
         }
 
         // Step 2: Execute the generated SQL query
-        const execResponse = await fetch('/api/execute-sql', {
+        const execResponse = await fetch(`${API_BASE}/execute-sql`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -84,11 +88,11 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onToggle }) => {
         }
 
         const execData = await execResponse.json();
-        
+
         // Step 3: Format results according to specification
         if (execData.data && execData.data.length > 0) {
           let response = 'Here are the matching peers:\n';
-          
+
           execData.data.forEach((peer: any) => {
             response += `• ${peer.name} – ${peer.course} (${peer.level})\n`;
           });
@@ -103,22 +107,22 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onToggle }) => {
         return 'Sorry, I encountered an error while processing your request. Please try again.';
       }
     }
-    
+
     // Skill verification responses
     if (lowerMessage.includes('verify') || lowerMessage.includes('skill') || lowerMessage.includes('quiz')) {
       return 'To verify your skills: 1) Go to "My Skills" in sidebar 2) Click "Add Skill" 3) Select your skill level 4) Take the verification quiz 5) Once you pass, your skill will be verified with a checkmark ✅';
     }
-    
+
     // Navigation help
     if (lowerMessage.includes('navigate') || lowerMessage.includes('how') || lowerMessage.includes('help')) {
       return 'Here\'s how to navigate SkillVouch AI:\n• Dashboard: Overview of your activity\n• My Skills: Add and verify your skills\n• Find Peers: Discover learning partners\n• Messages: Chat with matched peers\n• Profile: Manage your account settings\n\n💡 **Pro tip**: Ask me "show SQL students" or "find C experts" to get database results!';
     }
-    
+
     // Account help
     if (lowerMessage.includes('account') || lowerMessage.includes('profile') || lowerMessage.includes('settings')) {
       return 'For account management, go to Profile in the sidebar. There you can update your personal information, skills, availability preferences, and communication settings.';
     }
-    
+
     // Default response
     return 'I\'m here to help you query our database! You can ask me about:\n• **Peer Search**: "show SQL students", "find C experts"\n• **Course Queries**: "list all Python peers", "get Advanced SQL learners"\n• **Skill Verification**: "how to verify my skills"\n• **Platform Navigation**: "how to use the platform"\n\nAll queries use real database data with safe SQL generation.';
   };
@@ -209,11 +213,10 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onToggle }) => {
             className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[80%] p-3 rounded-lg ${
-                message.sender === 'user'
+              className={`max-w-[80%] p-3 rounded-lg ${message.sender === 'user'
                   ? 'bg-indigo-600 text-white'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
-              }`}
+                }`}
             >
               <div className="flex items-start space-x-2">
                 {message.sender === 'bot' && <Bot className="w-4 h-4 mt-0.5 text-indigo-600" />}

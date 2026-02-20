@@ -27,7 +27,7 @@ export function generateUUID(): string {
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0'));
-    return `${hex.slice(0,4).join('')}-${hex.slice(4,6).join('')}-${hex.slice(6,8).join('')}-${hex.slice(8,10).join('')}-${hex.slice(10,16).join('')}`;
+    return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
   }
 
   // Fallback (not cryptographically secure)
@@ -45,9 +45,9 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingSession, setLoadingSession] = useState(true);
   const [isChatBotOpen, setIsChatBotOpen] = useState(false);
-  
+
   // Notification State
-  const [notification, setNotification] = useState<{message: string, type: 'success'} | null>(null);
+  const [notification, setNotification] = useState<{ message: string, type: 'success' } | null>(null);
 
   // Navigation State params
   const [selectedChatUserId, setSelectedChatUserId] = useState<string | undefined>(undefined);
@@ -57,48 +57,52 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  
+
   const [authError, setAuthError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Session Check Logic
+  // Session Check Logic — runs ONCE on mount only
   useEffect(() => {
     const checkSession = async () => {
-        const sessionUser = dbService.getCurrentSession();
-        if (sessionUser) {
-            // Validate against DB to get fresh data
-            const freshUser = await dbService.getUserById(sessionUser.id);
-            if (freshUser) {
-                setUser(freshUser);
-                if (currentView === View.LANDING || currentView === View.LOGIN || currentView === View.SIGNUP) {
-                    setCurrentView(View.DASHBOARD);
-                }
-            } else {
-                // Session invalid (user deleted?)
-                dbService.logout();
-                setUser(INITIAL_USER);
-            }
+      const sessionUser = dbService.getCurrentSession();
+      if (sessionUser) {
+        // Show cached user immediately so name appears right away
+        setUser(sessionUser);
+        setCurrentView(View.DASHBOARD);
+        // Then try to get fresh data from DB
+        try {
+          const freshUser = await dbService.getUserById(sessionUser.id);
+          if (freshUser) {
+            setUser(freshUser);
+            // Update cache with fresh data
+            dbService.setSession(freshUser);
+          }
+          // If freshUser is null (e.g. backend slow/down), keep cached sessionUser
+        } catch {
+          // Backend unreachable — keep the cached session user, don't reset to Guest
         }
-        setLoadingSession(false);
+      }
+      setLoadingSession(false);
     };
     checkSession();
-  }, [currentView]);
+  }, []); // Empty deps — run once on mount only
+
 
   // Poll for unread messages count
   useEffect(() => {
     let interval: any;
     if (user.id !== 'temp') {
-        const fetchUnread = async () => {
-             try {
-                 const count = await dbService.getUnreadCount(user.id);
-                 setUnreadCount(count);
-             } catch (error) {
-                 console.error('Failed to fetch unread count:', error);
-             }
-        };
-        fetchUnread();
-        
-        interval = setInterval(fetchUnread, 5000); // Reduced frequency from 3s to 5s
+      const fetchUnread = async () => {
+        try {
+          const count = await dbService.getUnreadCount(user.id);
+          setUnreadCount(count);
+        } catch (error) {
+          console.error('Failed to fetch unread count:', error);
+        }
+      };
+      fetchUnread();
+
+      interval = setInterval(fetchUnread, 5000); // Reduced frequency from 3s to 5s
     }
     return () => clearInterval(interval);
   }, [user.id]);
@@ -130,15 +134,15 @@ export default function App() {
     setAuthError('');
     setIsSubmitting(true);
     try {
-        const loggedInUser = await dbService.login(email, password);
-        setUser(loggedInUser);
-        setCurrentView(View.DASHBOARD);
-        setNotification({ message: `Welcome back, ${loggedInUser.name.split(' ')[0]}!`, type: 'success' });
+      const loggedInUser = await dbService.login(email, password);
+      setUser(loggedInUser);
+      setCurrentView(View.DASHBOARD);
+      setNotification({ message: `Welcome back, ${loggedInUser.name.split(' ')[0]}!`, type: 'success' });
     } catch (err: any) {
-        setAuthError(err.message || 'Invalid email or password.');
-        console.error(err);
+      setAuthError(err.message || 'Invalid email or password.');
+      console.error(err);
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -151,8 +155,8 @@ export default function App() {
     }
 
     if (password !== confirmPassword) {
-        setAuthError('Passwords do not match.');
-        return;
+      setAuthError('Passwords do not match.');
+      return;
     }
 
     setIsSubmitting(true);
@@ -160,121 +164,121 @@ export default function App() {
       // Create account but do NOT auto-login
       // Removed location from signup
       await dbService.signup(fullName, email, password);
-      
+
       // Redirect to Login view
       setCurrentView(View.LOGIN);
       setNotification({ message: 'Account created successfully! Please log in.', type: 'success' });
-      
+
       // Clear passwords
       setPassword('');
       setConfirmPassword('');
-      
+
     } catch (err: any) {
       setAuthError(err.message || 'Signup failed.');
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
   // Custom navigation handler to support passing params (like chat user id)
   const navigateToView = (view: View, params?: any) => {
-      if (view !== View.MESSAGES) {
-          setSelectedChatUserId(undefined);
-      }
-      setCurrentView(view);
+    if (view !== View.MESSAGES) {
+      setSelectedChatUserId(undefined);
+    }
+    setCurrentView(view);
   };
 
   const renderView = () => {
     if (loadingSession) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-slate-950">
-                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-            </div>
-        );
+      return (
+        <div className="flex h-screen items-center justify-center bg-slate-950">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+        </div>
+      );
     }
 
     switch (currentView) {
       case View.DASHBOARD:
         return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <Dashboard 
-                    user={user} 
-                    onNavigateToProfile={(userId) => {
-                        setSelectedChatUserId(userId);
-                        setCurrentView(View.MESSAGES);
-                    }}
-                    onNavigate={navigateToView}
-                />
-            </Suspense>
+          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Dashboard
+              user={user}
+              onNavigateToProfile={(userId) => {
+                setSelectedChatUserId(userId);
+                setCurrentView(View.MESSAGES);
+              }}
+              onNavigate={navigateToView}
+            />
+          </Suspense>
         );
       case View.MY_SKILLS:
         return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <SkillList user={user} onUpdateUser={handleUpdateUser} />
-            </Suspense>
+          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <SkillList user={user} onUpdateUser={handleUpdateUser} />
+          </Suspense>
         );
       case View.FIND_PEERS:
         return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <MatchFinder 
-                    currentUser={user} 
-                    onMessageUser={(userId) => {
-                        setSelectedChatUserId(userId);
-                        setCurrentView(View.MESSAGES);
-                    }}
-                />
-            </Suspense>
+          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <MatchFinder
+              currentUser={user}
+              onMessageUser={(userId) => {
+                setSelectedChatUserId(userId);
+                setCurrentView(View.MESSAGES);
+              }}
+            />
+          </Suspense>
         );
       case View.ROADMAP:
         return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <RoadmapView />
-            </Suspense>
+          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <RoadmapView />
+          </Suspense>
         );
       case View.MESSAGES:
         return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <ChatView currentUser={user} initialChatUserId={selectedChatUserId} />
-            </Suspense>
+          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <ChatView currentUser={user} initialChatUserId={selectedChatUserId} />
+          </Suspense>
         );
       case View.PROFILE:
         return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <ProfileView user={user} onUpdateUser={handleUpdateUser} />
-            </Suspense>
+          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <ProfileView user={user} onUpdateUser={handleUpdateUser} />
+          </Suspense>
         );
       default:
         return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <Dashboard user={user} onNavigateToProfile={() => {}} onNavigate={navigateToView} />
-            </Suspense>
+          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Dashboard user={user} onNavigateToProfile={() => { }} onNavigate={navigateToView} />
+          </Suspense>
         );
     }
   };
 
   const NotificationToast = () => (
     notification ? (
-        <div className="fixed top-6 right-6 z-[100] animate-[slideIn_0.3s_ease-out]">
-          <div className="bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 border border-emerald-500 backdrop-blur-md bg-opacity-95">
-             <div className="bg-white/20 p-1.5 rounded-full">
-               <CheckCircle2 className="w-5 h-5" /> 
-             </div>
-             <p className="font-semibold text-sm">{notification.message}</p>
+      <div className="fixed top-6 right-6 z-[100] animate-[slideIn_0.3s_ease-out]">
+        <div className="bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 border border-emerald-500 backdrop-blur-md bg-opacity-95">
+          <div className="bg-white/20 p-1.5 rounded-full">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
+          <p className="font-semibold text-sm">{notification.message}</p>
         </div>
+      </div>
     ) : null
   );
 
   // Unauthenticated Views (Landing, Login, Signup)
   if (currentView === View.LANDING && !loadingSession) {
-      return (
-          <>
-            <NotificationToast />
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <LandingPage onNavigate={setCurrentView} />
-            </Suspense>
-          </>
-      );
+    return (
+      <>
+        <NotificationToast />
+        <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+          <LandingPage onNavigate={setCurrentView} />
+        </Suspense>
+      </>
+    );
   }
 
   if (currentView === View.LOGIN && !loadingSession) {
@@ -286,7 +290,7 @@ export default function App() {
         <NotificationToast />
 
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl relative z-10 animate-fade-in">
-           {/* Back Button for Login */}
+          {/* Back Button for Login */}
           <button onClick={() => setCurrentView(View.LANDING)} className="text-slate-500 hover:text-white mb-4 text-sm flex items-center">
             ← Back to Home
           </button>
@@ -296,13 +300,13 @@ export default function App() {
           </div>
           <h1 className="text-3xl font-bold text-center text-white mb-2">SkillVouch AI</h1>
           <p className="text-center text-slate-400 mb-8">Connect • Learn • Grow</p>
-          
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="relative">
               <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input 
-                type="email" 
-                placeholder="Email Address" 
+              <input
+                type="email"
+                placeholder="Email Address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
@@ -310,9 +314,9 @@ export default function App() {
             </div>
             <div className="relative">
               <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input 
-                type="password" 
-                placeholder="Password" 
+              <input
+                type="password"
+                placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
@@ -355,30 +359,30 @@ export default function App() {
           </button>
 
           <div className="flex flex-col items-center justify-center mb-6 text-indigo-500">
-             <Logo className="w-20 h-20 mb-2 shadow-2xl" />
+            <Logo className="w-20 h-20 mb-2 shadow-2xl" />
           </div>
           <h1 className="text-3xl font-bold text-center text-white mb-2">Create Account</h1>
           <p className="text-center text-slate-400 mb-8">Join the community of learners.</p>
-          
+
           <form onSubmit={handleSignup} className="space-y-4">
-             <div className="relative">
+            <div className="relative">
               <UserIcon className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input 
-                type="text" 
-                placeholder="Full Name" 
+              <input
+                type="text"
+                placeholder="Full Name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
-            
+
             {/* Removed Location Field */}
 
             <div className="relative">
               <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input 
-                type="email" 
-                placeholder="Email Address" 
+              <input
+                type="email"
+                placeholder="Email Address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
@@ -386,21 +390,21 @@ export default function App() {
             </div>
             <div className="relative">
               <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input 
-                type="password" 
-                placeholder="Password" 
+              <input
+                type="password"
+                placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
-            
+
             {/* Added Confirm Password */}
             <div className="relative">
               <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input 
-                type="password" 
-                placeholder="Confirm Password" 
+              <input
+                type="password"
+                placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
@@ -434,17 +438,17 @@ export default function App() {
 
   return (
     <>
-    <NotificationToast />
-    <Layout 
-      currentView={currentView} 
-      onNavigate={navigateToView} 
-      user={user}
-      onLogout={handleLogout}
-      unreadCount={unreadCount}
-    >
-      {renderView()}
-    </Layout>
-    <ChatBot isOpen={isChatBotOpen} onToggle={() => setIsChatBotOpen(!isChatBotOpen)} />
+      <NotificationToast />
+      <Layout
+        currentView={currentView}
+        onNavigate={navigateToView}
+        user={user}
+        onLogout={handleLogout}
+        unreadCount={unreadCount}
+      >
+        {renderView()}
+      </Layout>
+      <ChatBot isOpen={isChatBotOpen} onToggle={() => setIsChatBotOpen(!isChatBotOpen)} />
     </>
   );
 }

@@ -150,13 +150,13 @@ class SkillAssessmentEngine {
     return `${basePrompt.replace('{SKILL_NAME}', disambiguatedSkill)}
 
 CRITICAL REQUIREMENTS:
-1. Questions MUST test practical understanding, not trivia
-2. NO theoretical-only or generic questions
-3. Each question must have ONLY ONE correct answer
-4. Incorrect options must be realistic but clearly wrong
-5. Questions MUST be specific to ${disambiguatedSkill} - no mixing with adjacent skills
-6. Difficulty must EXACTLY match ${level} level
-7. Include relevant context, scenarios, or examples where appropriate
+1. Questions MUST test practical understanding, not trivia.
+2. At least 2 questions MUST be strictly SCENARIO-BASED (e.g., "You are building X, and need to achieve Y...").
+3. At least 1 question MUST provide a code snippet/process and ask for the EXACT EXPECTED OUTPUT.
+4. At least 1 question MUST provide a code snippet/process containing a deliberate ERROR/BUG and ask the user to identify the error or how to fix it.
+5. Questions MUST be specific to ${disambiguatedSkill} - no mixing with adjacent skills.
+6. Difficulty must EXACTLY match ${level} level.
+7. Include relevant code snippets, logs, or scenarios formatted in markdown where appropriate.
 
 OUTPUT FORMAT (STRICT JSON):
 {

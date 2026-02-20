@@ -12,7 +12,9 @@ const mistral = new ChatMistralAI({
 
 // Skill Suggestion Prompt
 const skillSuggestionPrompt = PromptTemplate.fromTemplate(`
-Suggest 5 relevant skills based on user's current skills and goals.
+Suggest 5 highly relevant but varied skills based on the user's current skills and goals. 
+
+Randomization Seed (to ensure unique diverse responses each time): {randomSeed}
 
 Current skills: [{currentSkills}]
 Goals: [{currentGoals}]
@@ -26,10 +28,11 @@ Requirements:
 - Suggest in-demand skills that complement current skills
 - Consider the user's goals when making suggestions
 - Do not include skills the user already knows
-- Do not include any markdown formatting or explanations
-- Return only the JSON object
 - Focus on programming and technology skills
 - Include modern, relevant technologies
+- Provide a creative and highly dynamic set of suggestions unlike standard generic lists
+- Do not include any markdown formatting or explanations
+- Return only the JSON object
 `);
 
 // Roadmap Generation Prompt
@@ -63,7 +66,8 @@ export const suggestSkills = async (currentSkills = [], currentGoals = []) => {
   try {
     const formattedPrompt = await skillSuggestionPrompt.format({
       currentSkills: currentSkills.join(', '),
-      currentGoals: currentGoals.join(', ')
+      currentGoals: currentGoals.join(', '),
+      randomSeed: Math.floor(Math.random() * 1000000).toString()
     });
 
     const response = await mistral.invoke(formattedPrompt);

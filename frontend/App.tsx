@@ -7,13 +7,33 @@ import { Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2 } from 'lucide-
 import { Logo } from './components/Logo';
 import { ChatBot } from './components/ChatBot';
 
-const Dashboard = lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
-const SkillList = lazy(() => import('./components/SkillList').then(module => ({ default: module.SkillList })));
-const MatchFinder = lazy(() => import('./components/MatchFinder').then(module => ({ default: module.MatchFinder })));
-const RoadmapView = lazy(() => import('./components/RoadmapView').then(module => ({ default: module.RoadmapView })));
-const ChatView = lazy(() => import('./components/ChatView').then(module => ({ default: module.ChatView })));
-const LandingPage = lazy(() => import('./components/LandingPage').then(module => ({ default: module.LandingPage })));
-const ProfileView = lazy(() => import('./components/ProfileView').then(module => ({ default: module.ProfileView })));
+// Smart lazy loader that automatically refreshes the page if a chunk fails to load 
+// (which happens right after a new deployment on Vercel because the browser still holds the old index.html)
+const lazyWithRetry = (componentImport: () => Promise<any>) =>
+  lazy(async () => {
+    const pageHasAlreadyBeenForceRefreshed = JSON.parse(
+      window.sessionStorage.getItem('page-has-been-force-refreshed') || 'false'
+    );
+    try {
+      const component = await componentImport();
+      window.sessionStorage.setItem('page-has-been-force-refreshed', 'false');
+      return component;
+    } catch (error) {
+      if (!pageHasAlreadyBeenForceRefreshed) {
+        window.sessionStorage.setItem('page-has-been-force-refreshed', 'true');
+        return window.location.reload();
+      }
+      throw error;
+    }
+  });
+
+const Dashboard = lazyWithRetry(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
+const SkillList = lazyWithRetry(() => import('./components/SkillList').then(module => ({ default: module.SkillList })));
+const MatchFinder = lazyWithRetry(() => import('./components/MatchFinder').then(module => ({ default: module.MatchFinder })));
+const RoadmapView = lazyWithRetry(() => import('./components/RoadmapView').then(module => ({ default: module.RoadmapView })));
+const ChatView = lazyWithRetry(() => import('./components/ChatView').then(module => ({ default: module.ChatView })));
+const LandingPage = lazyWithRetry(() => import('./components/LandingPage').then(module => ({ default: module.LandingPage })));
+const ProfileView = lazyWithRetry(() => import('./components/ProfileView').then(module => ({ default: module.ProfileView })));
 export function generateUUID(): string {
   // Use native if available
   if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {

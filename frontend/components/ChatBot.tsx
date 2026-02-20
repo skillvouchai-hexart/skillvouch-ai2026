@@ -104,7 +104,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onToggle }) => {
 
       } catch (error) {
         console.error('AI SQL query error:', error);
-        return 'Sorry, I encountered an error while processing your request. Please try again.';
+        return 'Unable to connect to the database. If this is the deployed app, please ensure ALLOWED_ORIGIN is set on Render and VITE_API_URL is set on Vercel. Try again shortly.';
       }
     }
 
@@ -214,8 +214,8 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onToggle }) => {
           >
             <div
               className={`max-w-[80%] p-3 rounded-lg ${message.sender === 'user'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
                 }`}
             >
               <div className="flex items-start space-x-2">

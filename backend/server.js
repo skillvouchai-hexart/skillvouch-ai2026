@@ -1069,10 +1069,46 @@ Requirements:
   }
 });
 
+// One-time admin: remove test users (protected by ADMIN_SECRET env var)
+app.delete('/api/admin/cleanup-test-users', async (req, res) => {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret || req.headers['x-admin-secret'] !== secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const testUsers = await query(
+      `SELECT id, name, email FROM users
+       WHERE email LIKE '%test%'
+          OR email LIKE '%example.com'
+          OR name LIKE '%Test User%'
+          OR name LIKE '%Nitin Kumar Reddy Meruva%'
+          OR name LIKE '%Jitin Kumar Reddy Meruva%'`
+    );
+    if (testUsers.length === 0) {
+      return res.json({ message: 'No test users found. Database is already clean.' });
+    }
+    const ids = testUsers.map(u => u.id);
+    const ph = ids.map(() => '?').join(', ');
+    await query(`DELETE FROM exchange_feedback WHERE from_user_id IN (${ph}) OR to_user_id IN (${ph})`, [...ids, ...ids]);
+    await query(`DELETE FROM messages WHERE sender_id IN (${ph}) OR receiver_id IN (${ph})`, [...ids, ...ids]);
+    await query(`DELETE FROM exchange_requests WHERE from_user_id IN (${ph}) OR to_user_id IN (${ph})`, [...ids, ...ids]);
+    await query(`DELETE FROM skill_quizzes WHERE user_id IN (${ph})`, ids).catch(() => { });
+    await query(`DELETE FROM users WHERE id IN (${ph})`, ids);
+    res.json({
+      message: `Removed ${testUsers.length} test user(s) and all related data.`,
+      removed: testUsers.map(u => ({ name: u.name, email: u.email }))
+    });
+  } catch (err) {
+    console.error('Cleanup error:', err);
+    res.status(500).json({ error: 'Cleanup failed', details: err.message });
+  }
+});
+
 // Health check endpoint for Render
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
 
 app.get('/', (_req, res) => {
   res.json({ message: 'SkillVouch API is running', version: '1.0.0' });

@@ -43,32 +43,33 @@ export const RoadmapView: React.FC = () => {
   const [skillInput, setSkillInput] = useState('');
   const [roadmapData, setRoadmapData] = useState<RoadmapResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     if (!skillInput) return;
     setLoading(true);
     setRoadmapData(null);
+    setError(null);
     try {
       const response = await fetch(`${API_BASE}/learning/roadmap`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          skill: skillInput,
-          currentLevel: 'beginner',
-          goals: []
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill: skillInput, currentLevel: 'beginner', goals: [] })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate roadmap');
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || errData.message || `Server error: ${response.status}`);
       }
 
       const data = await response.json();
+      if (!data.roadmap || !Array.isArray(data.roadmap)) {
+        throw new Error('Invalid response from server — please try again.');
+      }
       setRoadmapData(data);
-    } catch (error) {
-      console.error('Error generating roadmap:', error);
+    } catch (err: any) {
+      console.error('Error generating roadmap:', err);
+      setError(err.message || 'Failed to generate roadmap. Check your MISTRAL_API_KEY on Render.');
     } finally {
       setLoading(false);
     }
@@ -88,6 +89,7 @@ export const RoadmapView: React.FC = () => {
             type="text"
             value={skillInput}
             onChange={(e) => setSkillInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
             placeholder="e.g. Project Management, Plumbing, Python"
             className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
           />
@@ -101,6 +103,12 @@ export const RoadmapView: React.FC = () => {
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Generate Path'}
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400 text-sm">
+          ⚠️ {error}
+        </div>
+      )}
 
       {roadmapData && (
         <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4 mb-6">

@@ -16,9 +16,25 @@ interface QuizResponse {
   questions: QuizQuestion[];
 }
 
-const API_BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : 'https://skillvouch-ai2026.onrender.com/api';
+const API_BASE = 'https://skillvouch-ai2026.onrender.com/api';
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const fetchWithRetry = async (url: string, options?: RequestInit, retries = 3): Promise<Response> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      if ((res.status === 500 || res.status === 502 || res.status === 503) && i < retries - 1) {
+        await delay(1200 * (i + 1));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await delay(1200 * (i + 1));
+    }
+  }
+  throw new Error('Request failed after retries');
+};
 
 type SkillCategory = 'Technical' | 'Creative' | 'Academic' | 'Vocational' | 'Soft Skill';
 type DifficultyLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
@@ -168,7 +184,7 @@ Generate exactly 5 high-quality, skill-specific questions.`;
     const prompt = this.generatePrompt(skillName, level);
 
     try {
-      const response = await fetch(`${API_BASE}/quiz/generate`, {
+      const response = await fetchWithRetry(`${API_BASE}/quiz/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

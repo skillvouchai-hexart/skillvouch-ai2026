@@ -1,9 +1,7 @@
 import { User, ExchangeRequest, Message, ExchangeFeedback } from '../types';
 import { suggestSkillsDirect, generateRoadmapDirect } from './mistralDirectService';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : 'https://skillvouch-ai2026.onrender.com/api';
+const API_BASE_URL = 'https://skillvouch-ai2026.onrender.com/api';
 
 
 // Helper to simulate delay

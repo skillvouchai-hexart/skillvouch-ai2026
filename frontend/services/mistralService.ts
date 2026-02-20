@@ -1,9 +1,7 @@
 import { QuizQuestion, RoadmapItem, User } from "../types";
 import { apiService } from "./apiService";
 
-const API_BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : 'https://skillvouch-ai2026.onrender.com/api';
+const API_BASE = 'https://skillvouch-ai2026.onrender.com/api';
 
 type QuizDifficulty = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 

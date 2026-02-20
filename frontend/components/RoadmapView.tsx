@@ -22,9 +22,25 @@ interface RoadmapStep {
   projects: string[];
 }
 
-const API_BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : 'https://skillvouch-ai2026.onrender.com/api';
+const API_BASE = 'https://skillvouch-ai2026.onrender.com/api';
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const fetchWithRetry = async (url: string, options?: RequestInit, retries = 3): Promise<Response> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      if ((res.status === 500 || res.status === 502 || res.status === 503) && i < retries - 1) {
+        await delay(1200 * (i + 1));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await delay(1200 * (i + 1));
+    }
+  }
+  throw new Error('Request failed after retries');
+};
 
 const getResourceIcon = (type: string) => {
   switch (type) {
@@ -51,7 +67,7 @@ export const RoadmapView: React.FC = () => {
     setRoadmapData(null);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/learning/roadmap`, {
+      const response = await fetchWithRetry(`${API_BASE}/learning/roadmap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skill: skillInput, currentLevel: 'beginner', goals: [] })

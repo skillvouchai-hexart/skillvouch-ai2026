@@ -52,13 +52,20 @@ const generateId = (): string => {
 // Session storage for current user
 const SESSION_KEY = 'skillvouch_session';
 
+// Helper to guarantee user arrays are present and avoid UI crashes
+const sanitizeUser = (user: any): User => ({
+  ...user,
+  skillsKnown: Array.isArray(user.skillsKnown) ? user.skillsKnown : [],
+  skillsToLearn: Array.isArray(user.skillsToLearn) ? user.skillsToLearn : []
+});
+
 export const apiService = {
 
   // --- SESSION ---
   getCurrentSession: (): User | null => {
     try {
       const stored = localStorage.getItem(SESSION_KEY);
-      return stored ? JSON.parse(stored) : null;
+      return stored ? sanitizeUser(JSON.parse(stored)) : null;
     } catch { return null; }
   },
 
@@ -75,14 +82,16 @@ export const apiService = {
   getUsers: async (): Promise<User[]> => {
     const response = await fetchWithRetry(`${API_BASE_URL}/users`);
     if (!response.ok) throw new Error('Failed to fetch users');
-    return response.json();
+    const users = await response.json();
+    return Array.isArray(users) ? users.map(sanitizeUser) : [];
   },
 
   getUserById: async (id: string): Promise<User | undefined> => {
     try {
       const response = await fetchWithRetry(`${API_BASE_URL}/users/${id}`);
       if (!response.ok) return undefined;
-      return response.json();
+      const user = await response.json();
+      return sanitizeUser(user);
     } catch {
       return undefined;
     }
@@ -112,8 +121,9 @@ export const apiService = {
 
     // Simple password check (In a real app, use hashing)
     if (user && user.password === password) {
-      apiService.setSession(user);
-      return user;
+      const safeUser = sanitizeUser(user);
+      apiService.setSession(safeUser);
+      return safeUser;
     }
     throw new Error("Invalid email or password");
   },

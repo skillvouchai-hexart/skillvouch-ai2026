@@ -6,6 +6,7 @@ import { dbService } from './services/dbService';
 import { Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { ChatBot } from './components/ChatBot';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Smart lazy loader that automatically refreshes the page if a chunk fails to load 
 // (which happens right after a new deployment on Vercel because the browser still holds the old index.html)
@@ -217,63 +218,67 @@ export default function App() {
       );
     }
 
-    switch (currentView) {
-      case View.DASHBOARD:
-        return (
-          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-            <Dashboard
-              user={user}
-              onNavigateToProfile={(userId) => {
-                setSelectedChatUserId(userId);
-                setCurrentView(View.MESSAGES);
-              }}
-              onNavigate={navigateToView}
-            />
-          </Suspense>
-        );
-      case View.MY_SKILLS:
-        return (
-          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-            <SkillList user={user} onUpdateUser={handleUpdateUser} />
-          </Suspense>
-        );
-      case View.FIND_PEERS:
-        return (
-          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-            <MatchFinder
-              currentUser={user}
-              onMessageUser={(userId) => {
-                setSelectedChatUserId(userId);
-                setCurrentView(View.MESSAGES);
-              }}
-            />
-          </Suspense>
-        );
-      case View.ROADMAP:
-        return (
-          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-            <RoadmapView />
-          </Suspense>
-        );
-      case View.MESSAGES:
-        return (
-          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-            <ChatView currentUser={user} initialChatUserId={selectedChatUserId} />
-          </Suspense>
-        );
-      case View.PROFILE:
-        return (
-          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-            <ProfileView user={user} onUpdateUser={handleUpdateUser} />
-          </Suspense>
-        );
-      default:
-        return (
-          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-            <Dashboard user={user} onNavigateToProfile={() => { }} onNavigate={navigateToView} />
-          </Suspense>
-        );
-    }
+    const getView = () => {
+      switch (currentView) {
+        case View.DASHBOARD:
+          return (
+            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+              <Dashboard
+                user={user}
+                onNavigateToProfile={(userId) => {
+                  setSelectedChatUserId(userId);
+                  setCurrentView(View.MESSAGES);
+                }}
+                onNavigate={navigateToView}
+              />
+            </Suspense>
+          );
+        case View.MY_SKILLS:
+          return (
+            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+              <SkillList user={user} onUpdateUser={handleUpdateUser} />
+            </Suspense>
+          );
+        case View.FIND_PEERS:
+          return (
+            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+              <MatchFinder
+                currentUser={user}
+                onMessageUser={(userId) => {
+                  setSelectedChatUserId(userId);
+                  setCurrentView(View.MESSAGES);
+                }}
+              />
+            </Suspense>
+          );
+        case View.ROADMAP:
+          return (
+            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+              <RoadmapView />
+            </Suspense>
+          );
+        case View.MESSAGES:
+          return (
+            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+              <ChatView currentUser={user} initialChatUserId={selectedChatUserId} />
+            </Suspense>
+          );
+        case View.PROFILE:
+          return (
+            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+              <ProfileView user={user} onUpdateUser={handleUpdateUser} />
+            </Suspense>
+          );
+        default:
+          return (
+            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+              <Dashboard user={user} onNavigateToProfile={() => { }} onNavigate={navigateToView} />
+            </Suspense>
+          );
+      }
+    };
+
+    return <ErrorBoundary>{getView()}</ErrorBoundary>;
   };
 
   const NotificationToast = () => (

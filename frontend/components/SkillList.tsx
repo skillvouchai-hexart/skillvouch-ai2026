@@ -14,36 +14,39 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
   const [quizSkill, setQuizSkill] = useState<string | null>(null);
   const [newSkillName, setNewSkillName] = useState('');
   const [activeTab, setActiveTab] = useState<'known' | 'learn'>('known');
-  
-  const [suggestions, setSuggestions] = useState<{skills: string[], recommendations?: Record<string, string>, categories?: Record<string, string>}>({skills: []});
+
+  const [suggestions, setSuggestions] = useState<{ skills: string[], recommendations?: Record<string, string>, categories?: Record<string, string> }>({ skills: [] });
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
+  const skillsKnown = user.skillsKnown || [];
+  const skillsToLearn = user.skillsToLearn || [];
+
   const fetchSuggestions = async () => {
-    if (user.skillsKnown.length === 0 && user.skillsToLearn.length === 0) return;
-    
+    if (skillsKnown.length === 0 && skillsToLearn.length === 0) return;
+
     setLoadingSuggestions(true);
     try {
-        const known = user.skillsKnown.map(s => s.name);
-        const goals = user.skillsToLearn;
-        const result = await suggestSkills(known, goals);
-        const filtered = result.skills.filter(s => !known.includes(s) && !goals.includes(s));
-        setSuggestions(result);
+      const known = skillsKnown.map(s => s.name);
+      const goals = skillsToLearn;
+      const result = await suggestSkills(known, goals);
+      const filtered = result.skills.filter(s => !known.includes(s) && !goals.includes(s));
+      setSuggestions(result);
     } catch (e) {
-        console.error("Failed to fetch suggestions", e);
+      console.error("Failed to fetch suggestions", e);
     } finally {
-        setLoadingSuggestions(false);
+      setLoadingSuggestions(false);
     }
   };
 
   useEffect(() => {
-     if(suggestions.skills.length === 0 && (user.skillsKnown.length > 0 || user.skillsToLearn.length > 0)) {
-        fetchSuggestions();
-     }
-  }, [user.skillsKnown.length, user.skillsToLearn.length]);
+    if (suggestions.skills.length === 0 && (skillsKnown.length > 0 || skillsToLearn.length > 0)) {
+      fetchSuggestions();
+    }
+  }, [skillsKnown.length, skillsToLearn.length]);
 
   const updateUserAndDB = async (updatedUser: User) => {
-      onUpdateUser(updatedUser);
-      await dbService.saveUser(updatedUser);
+    onUpdateUser(updatedUser);
+    await dbService.saveUser(updatedUser);
   };
 
   const handleAddSkill = () => {
@@ -120,17 +123,15 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
         <div className="flex border-b border-slate-200 dark:border-slate-800">
           <button
             onClick={() => setActiveTab('known')}
-            className={`flex-1 py-4 text-center font-medium transition ${
-              activeTab === 'known' ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-            }`}
+            className={`flex-1 py-4 text-center font-medium transition ${activeTab === 'known' ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
           >
             Skills I Know
           </button>
           <button
             onClick={() => setActiveTab('learn')}
-            className={`flex-1 py-4 text-center font-medium transition ${
-              activeTab === 'learn' ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-            }`}
+            className={`flex-1 py-4 text-center font-medium transition ${activeTab === 'learn' ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
           >
             Skills I Want To Learn
           </button>
@@ -155,10 +156,10 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
 
           <div className="space-y-4">
             {activeTab === 'known' ? (
-              user.skillsKnown.length === 0 ? (
+              skillsKnown.length === 0 ? (
                 <div className="text-center py-10 text-slate-500 dark:text-slate-400">No skills added yet.</div>
               ) : (
-                user.skillsKnown.map(skill => (
+                skillsKnown.map(skill => (
                   <div key={skill.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
                     <div className="flex items-center gap-4">
                       <div className="bg-indigo-100 dark:bg-indigo-500/20 p-2 rounded text-indigo-600 dark:text-indigo-400">
@@ -194,7 +195,7 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
               )
             ) : (
               <div className="grid md:grid-cols-2 gap-4">
-                {user.skillsToLearn.map((skill, idx) => (
+                {skillsToLearn.map((skill, idx) => (
                   <div key={idx} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
                     <div className="flex items-center gap-3">
                       <div className="bg-blue-100 dark:bg-blue-500/20 p-2 rounded text-blue-600 dark:text-blue-400">
@@ -246,8 +247,8 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
                       <div className="flex items-center gap-3 mb-2">
                         <button
                           onClick={() => {
-                            if (!user.skillsToLearn.includes(skill)) {
-                              updateUserAndDB({ ...user, skillsToLearn: [...user.skillsToLearn, skill] });
+                            if (!skillsToLearn.includes(skill)) {
+                              updateUserAndDB({ ...user, skillsToLearn: [...skillsToLearn, skill] });
                               setSuggestions(prev => ({
                                 ...prev,
                                 skills: prev.skills.filter(s => s !== skill)
@@ -285,14 +286,14 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
 };
 
 const CheckBadge = () => (
-    <div className="group relative flex items-center">
-        <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-             <svg className="w-3 h-3 text-slate-900 dark:text-slate-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-             </svg>
-        </div>
-        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max bg-slate-900 dark:bg-slate-800 text-xs text-slate-100 dark:text-slate-200 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition pointer-events-none">
-            AI Verified
-        </span>
+  <div className="group relative flex items-center">
+    <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+      <svg className="w-3 h-3 text-slate-900 dark:text-slate-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+      </svg>
     </div>
+    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max bg-slate-900 dark:bg-slate-800 text-xs text-slate-100 dark:text-slate-200 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition pointer-events-none">
+      AI Verified
+    </span>
+  </div>
 );

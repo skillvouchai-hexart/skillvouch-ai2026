@@ -1080,9 +1080,7 @@ app.delete('/api/admin/cleanup-test-users', async (req, res) => {
       `SELECT id, name, email FROM users
        WHERE email LIKE '%test%'
           OR email LIKE '%example.com'
-          OR name LIKE '%Test User%'
-          OR name LIKE '%Nitin Kumar Reddy Meruva%'
-          OR name LIKE '%Jitin Kumar Reddy Meruva%'`
+          OR name LIKE '%Test User%'`
     );
     if (testUsers.length === 0) {
       return res.json({ message: 'No test users found. Database is already clean.' });

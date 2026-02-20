@@ -6,8 +6,26 @@ const API_BASE_URL = import.meta.env.VITE_API_URL
   : 'https://skillvouch-ai2026.onrender.com/api';
 
 
-// Helper to simulate delay for "real" feel (reduced for better performance)
+// Helper to simulate delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Retry helper — handles Render cold-start 500/502/503 errors
+const fetchWithRetry = async (url: string, options?: RequestInit, retries = 3): Promise<Response> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      if ((res.status === 500 || res.status === 502 || res.status === 503) && i < retries - 1) {
+        await delay(1200 * (i + 1)); // 1.2s, 2.4s backoff
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await delay(1200 * (i + 1));
+    }
+  }
+  throw new Error('Request failed after retries');
+};
 
 // Safe UUID generator that works even if crypto.randomUUID is not available
 const generateId = (): string => {
@@ -55,15 +73,14 @@ export const apiService = {
 
   // --- USER MGMT ---
   getUsers: async (): Promise<User[]> => {
-    await delay(50); // Reduced from 300ms
-    const response = await fetch(`${API_BASE_URL}/users`);
+    const response = await fetchWithRetry(`${API_BASE_URL}/users`);
     if (!response.ok) throw new Error('Failed to fetch users');
     return response.json();
   },
 
   getUserById: async (id: string): Promise<User | undefined> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${id}`);
+      const response = await fetchWithRetry(`${API_BASE_URL}/users/${id}`);
       if (!response.ok) return undefined;
       return response.json();
     } catch {

@@ -18,7 +18,7 @@ interface QuizResponse {
 
 const API_BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api';
+  : 'https://skillvouch-ai2026.onrender.com/api';
 
 type SkillCategory = 'Technical' | 'Creative' | 'Academic' | 'Vocational' | 'Soft Skill';
 type DifficultyLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';

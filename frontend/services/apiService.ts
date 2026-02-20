@@ -3,7 +3,7 @@ import { suggestSkillsDirect, generateRoadmapDirect } from './mistralDirectServi
 
 const API_BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api';
+  : 'https://skillvouch-ai2026.onrender.com/api';
 
 
 // Helper to simulate delay for "real" feel (reduced for better performance)

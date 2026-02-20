@@ -3,7 +3,7 @@
 
 const API_BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api';
+  : 'https://skillvouch-ai2026.onrender.com/api';
 
 // Skill Suggestion – calls backend which calls Mistral securely
 export const suggestSkillsDirect = async (currentSkills: string[], currentGoals: string[] = []): Promise<string[]> => {

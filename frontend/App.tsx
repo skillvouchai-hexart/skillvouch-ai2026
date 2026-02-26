@@ -7,6 +7,7 @@ import { Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2 } from 'lucide-
 import { Logo } from './components/Logo';
 import { ChatBot } from './components/ChatBot';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ThemeProvider } from './ThemeContext';
 
 // Smart lazy loader that automatically refreshes the page if a chunk fails to load 
 // (which happens right after a new deployment on Vercel because the browser still holds the old index.html)
@@ -212,17 +213,19 @@ export default function App() {
   const renderView = () => {
     if (loadingSession) {
       return (
-        <div className="flex h-screen items-center justify-center bg-slate-950">
+        <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
         </div>
       );
     }
 
+    const suspenseFallback = <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>;
+
     const getView = () => {
       switch (currentView) {
         case View.DASHBOARD:
           return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Suspense fallback={suspenseFallback}>
               <Dashboard
                 user={user}
                 onNavigateToProfile={(userId) => {
@@ -235,13 +238,13 @@ export default function App() {
           );
         case View.MY_SKILLS:
           return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Suspense fallback={suspenseFallback}>
               <SkillList user={user} onUpdateUser={handleUpdateUser} />
             </Suspense>
           );
         case View.FIND_PEERS:
           return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Suspense fallback={suspenseFallback}>
               <MatchFinder
                 currentUser={user}
                 onMessageUser={(userId) => {
@@ -253,25 +256,25 @@ export default function App() {
           );
         case View.ROADMAP:
           return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Suspense fallback={suspenseFallback}>
               <RoadmapView />
             </Suspense>
           );
         case View.MESSAGES:
           return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Suspense fallback={suspenseFallback}>
               <ChatView currentUser={user} initialChatUserId={selectedChatUserId} />
             </Suspense>
           );
         case View.PROFILE:
           return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Suspense fallback={suspenseFallback}>
               <ProfileView user={user} onUpdateUser={handleUpdateUser} />
             </Suspense>
           );
         default:
           return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+            <Suspense fallback={suspenseFallback}>
               <Dashboard user={user} onNavigateToProfile={() => { }} onNavigate={navigateToView} />
             </Suspense>
           );
@@ -297,172 +300,176 @@ export default function App() {
   // Unauthenticated Views (Landing, Login, Signup)
   if (currentView === View.LANDING && !loadingSession) {
     return (
-      <>
+      <ThemeProvider>
         <NotificationToast />
-        <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
+        <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
           <LandingPage onNavigate={setCurrentView} />
         </Suspense>
-      </>
+      </ThemeProvider>
     );
   }
 
   if (currentView === View.LOGIN && !loadingSession) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 pointer-events-none"></div>
+      <ThemeProvider>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden transition-colors duration-300">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 pointer-events-none"></div>
 
-        <NotificationToast />
+          <NotificationToast />
 
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl relative z-10 animate-fade-in">
-          {/* Back Button for Login */}
-          <button onClick={() => setCurrentView(View.LANDING)} className="text-slate-500 hover:text-white mb-4 text-sm flex items-center">
-            ← Back to Home
-          </button>
-
-          <div className="flex flex-col items-center justify-center mb-6 text-indigo-500">
-            <Logo className="w-24 h-24 mb-2 shadow-2xl" />
-          </div>
-          <h1 className="text-3xl font-bold text-center text-white mb-2">SkillVouch AI</h1>
-          <p className="text-center text-slate-400 mb-8">Connect • Learn • Grow</p>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="relative">
-              <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input
-                type="email"
-                placeholder="Email Address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            {authError && (
-              <div className="flex items-center text-red-400 text-sm bg-red-400/10 p-3 rounded-lg">
-                <AlertCircle className="w-4 h-4 mr-2" />
-                {authError}
-              </div>
-            )}
-
-            <button disabled={isSubmitting} type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50">
-              {isSubmitting ? 'Logging in...' : 'Login'}
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-2xl shadow-2xl relative z-10 animate-fade-in">
+            {/* Back Button for Login */}
+            <button onClick={() => setCurrentView(View.LANDING)} className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white mb-4 text-sm flex items-center transition-colors">
+              ← Back to Home
             </button>
-          </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-slate-500">
-              Don't have an account?{' '}
-              <button onClick={() => { setAuthError(''); setCurrentView(View.SIGNUP); }} className="text-indigo-400 hover:text-indigo-300 font-medium">
-                Sign up
+            <div className="flex flex-col items-center justify-center mb-6 text-indigo-500">
+              <Logo className="w-24 h-24 mb-2 shadow-2xl" />
+            </div>
+            <h1 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-2">SkillVouch AI</h1>
+            <p className="text-center text-slate-500 dark:text-slate-400 mb-8">Connect • Learn • Grow</p>
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="relative">
+                <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg pl-10 pr-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
+                />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg pl-10 pr-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
+                />
+              </div>
+
+              {authError && (
+                <div className="flex items-center text-red-500 dark:text-red-400 text-sm bg-red-50 dark:bg-red-400/10 border border-red-200 dark:border-transparent p-3 rounded-lg">
+                  <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+                  {authError}
+                </div>
+              )}
+
+              <button disabled={isSubmitting} type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50">
+                {isSubmitting ? 'Logging in...' : 'Login'}
               </button>
-            </p>
+            </form>
+
+            <div className="mt-6 text-center">
+              <p className="text-slate-500 dark:text-slate-500">
+                Don't have an account?{' '}
+                <button onClick={() => { setAuthError(''); setCurrentView(View.SIGNUP); }} className="text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 font-medium transition-colors">
+                  Sign up
+                </button>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </ThemeProvider>
     );
   }
 
   if (currentView === View.SIGNUP && !loadingSession) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <NotificationToast />
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl relative z-10 animate-fade-in">
-          {/* Back Button for Signup */}
-          <button onClick={() => setCurrentView(View.LANDING)} className="text-slate-500 hover:text-white mb-4 text-sm flex items-center">
-            ← Back to Home
-          </button>
-
-          <div className="flex flex-col items-center justify-center mb-6 text-indigo-500">
-            <Logo className="w-20 h-20 mb-2 shadow-2xl" />
-          </div>
-          <h1 className="text-3xl font-bold text-center text-white mb-2">Create Account</h1>
-          <p className="text-center text-slate-400 mb-8">Join the community of learners.</p>
-
-          <form onSubmit={handleSignup} className="space-y-4">
-            <div className="relative">
-              <UserIcon className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Full Name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            {/* Removed Location Field */}
-
-            <div className="relative">
-              <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input
-                type="email"
-                placeholder="Email Address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            {/* Added Confirm Password */}
-            <div className="relative">
-              <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-500" />
-              <input
-                type="password"
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            {authError && (
-              <div className="flex items-center text-red-400 text-sm bg-red-400/10 p-3 rounded-lg">
-                <AlertCircle className="w-4 h-4 mr-2" />
-                {authError}
-              </div>
-            )}
-
-            <button disabled={isSubmitting} type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50">
-              {isSubmitting ? 'Creating account...' : 'Sign Up'}
+      <ThemeProvider>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden transition-colors duration-300">
+          <NotificationToast />
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-2xl shadow-2xl relative z-10 animate-fade-in">
+            {/* Back Button for Signup */}
+            <button onClick={() => setCurrentView(View.LANDING)} className="text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-white mb-4 text-sm flex items-center transition-colors">
+              ← Back to Home
             </button>
-          </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-slate-500">
-              Already have an account?{' '}
-              <button onClick={() => { setAuthError(''); setCurrentView(View.LOGIN); }} className="text-indigo-400 hover:text-indigo-300 font-medium">
-                Login
+            <div className="flex flex-col items-center justify-center mb-6 text-indigo-500">
+              <Logo className="w-20 h-20 mb-2 shadow-2xl" />
+            </div>
+            <h1 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-2">Create Account</h1>
+            <p className="text-center text-slate-500 dark:text-slate-400 mb-8">Join the community of learners.</p>
+
+            <form onSubmit={handleSignup} className="space-y-4">
+              <div className="relative">
+                <UserIcon className="absolute left-3 top-3.5 w-5 h-5 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg pl-10 pr-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
+                />
+              </div>
+
+              {/* Removed Location Field */}
+
+              <div className="relative">
+                <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg pl-10 pr-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
+                />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg pl-10 pr-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
+                />
+              </div>
+
+              {/* Added Confirm Password */}
+              <div className="relative">
+                <Lock className="absolute left-3 top-3.5 w-5 h-5 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg pl-10 pr-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors"
+                />
+              </div>
+
+              {authError && (
+                <div className="flex items-center text-red-500 dark:text-red-400 text-sm bg-red-50 dark:bg-red-400/10 border border-red-200 dark:border-transparent p-3 rounded-lg">
+                  <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+                  {authError}
+                </div>
+              )}
+
+              <button disabled={isSubmitting} type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50">
+                {isSubmitting ? 'Creating account...' : 'Sign Up'}
               </button>
-            </p>
+            </form>
+
+            <div className="mt-6 text-center">
+              <p className="text-slate-500">
+                Already have an account?{' '}
+                <button onClick={() => { setAuthError(''); setCurrentView(View.LOGIN); }} className="text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 font-medium transition-colors">
+                  Login
+                </button>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </ThemeProvider>
     );
   }
 
   return (
-    <>
+    <ThemeProvider>
       <NotificationToast />
       <Layout
         currentView={currentView}
@@ -474,6 +481,6 @@ export default function App() {
         {renderView()}
       </Layout>
       <ChatBot isOpen={isChatBotOpen} onToggle={() => setIsChatBotOpen(!isChatBotOpen)} />
-    </>
+    </ThemeProvider>
   );
 }

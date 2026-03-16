@@ -1554,35 +1554,37 @@ app.get('/api/jobs', async (req, res) => {
   const location = l ? String(l) : '';
 
   try {
-    // 1. Fetch Local Jobs (VConnectU)
+    // 1. Fetch Local Jobs (VConnectU DB)
     let localJobs = [];
     let sql = 'SELECT * FROM jobs WHERE 1=1';
     let params = [];
 
-    // --- AI QUERY SEMANTIC PARSING ---
-    let expandedSearchTerm = '';
+    // --- AI QUERY SEMANTIC PARSING (fault-tolerant) ---
     if (queryStr) {
-       const parsedIntent = await parseJobSearchQuery(queryStr);
-       // Construct a boolean search string: +Title* +(Skill1 Skill2)
-       const titleTerms = parsedIntent.titles.map(t => `+"${t}"`).join(' ');
-       const skillTerms = parsedIntent.skills.length > 0 ? `+(${parsedIntent.skills.join(' ')})` : '';
-       expandedSearchTerm = `${titleTerms} ${skillTerms}`.trim() || queryStr;
+      try {
+        const parsedIntent = await parseJobSearchQuery(queryStr);
+        const titleTerms = parsedIntent.titles.map(t => `+"${t}"`).join(' ');
+        const skillTerms = parsedIntent.skills.length > 0 ? `+(${parsedIntent.skills.join(' ')})` : '';
+        const expandedSearchTerm = `${titleTerms} ${skillTerms}`.trim() || queryStr;
 
-       // Use FULLTEXT boolean mode instead of LIKE
-       sql += ' AND MATCH(title, company, description, required_skills, location) AGAINST(? IN BOOLEAN MODE)';
-       params.push(expandedSearchTerm);
-       
-       // Override / enhance explicit parameters with AI intent if not provided
-       if (!req.query.remote && parsedIntent.isRemote !== null) {
+        sql += ' AND MATCH(title, company, description, required_skills, location) AGAINST(? IN BOOLEAN MODE)';
+        params.push(expandedSearchTerm);
+
+        if (!req.query.remote && parsedIntent.isRemote !== null) {
           req.query.remote = parsedIntent.isRemote ? 'true' : 'false';
-       }
-       if (!req.query.experience && parsedIntent.experience) {
+        }
+        if (!req.query.experience && parsedIntent.experience) {
           req.query.experience = parsedIntent.experience;
-       }
+        }
+      } catch (aiParseErr) {
+        console.error('AI query parser failed, falling back to LIKE search:', aiParseErr.message);
+        sql += ' AND (title LIKE ? OR company LIKE ? OR description LIKE ? OR required_skills LIKE ?)';
+        const likeQ = `%${queryStr}%`;
+        params.push(likeQ, likeQ, likeQ, likeQ);
+      }
     } else if (location) {
-       // Fallback for location-only searches without a query
-       sql += ' AND (location LIKE ? OR location = "Remote")';
-       params.push(`%${location}%`);
+      sql += ' AND (location LIKE ? OR location = "Remote")';
+      params.push(`%${location}%`);
     }
 
     // --- STANDARD FILTERS ---
@@ -1590,74 +1592,95 @@ app.get('/api/jobs', async (req, res) => {
       sql += ' AND sector = ?';
       params.push(String(sector));
     }
-
     if (role) {
       sql += ' AND role = ?';
       params.push(String(role));
     }
-    
     if (req.query.experience) {
       sql += ' AND experience_level = ?';
       params.push(String(req.query.experience));
     }
-
     if (req.query.remote === 'true') {
       sql += ' AND (is_remote = 1 OR location = "Remote")';
     }
 
     sql += ' ORDER BY created_at DESC LIMIT 50';
-    localJobs = await query(sql, params);
+    
+    try {
+      localJobs = await query(sql, params);
+    } catch (dbErr) {
+      console.error('DB query failed, trying simple fallback:', dbErr.message);
+      // Fallback: simplest possible query if FULLTEXT/columns fail
+      try {
+        localJobs = await query('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 50');
+      } catch (fallbackErr) {
+        console.error('Even fallback DB query failed:', fallbackErr.message);
+      }
+    }
 
     const formattedLocal = localJobs.map(job => {
-      // Generate hash for local jobs if missing
       const hashInput = `${job.title}|${job.company}|${job.location}`.toLowerCase().replace(/\s+/g, '');
       const jobHash = job.job_hash || Buffer.from(hashInput).toString('base64').slice(0, 32);
 
+      let verificationDetails;
+      try {
+        verificationDetails = job.verification_details 
+          ? (typeof job.verification_details === 'string' ? JSON.parse(job.verification_details) : job.verification_details) 
+          : { confidenceScore: 100, trustSignals: ['Internal Verified Listing'], lastChecked: new Date().toISOString() };
+      } catch {
+        verificationDetails = { confidenceScore: 100, trustSignals: ['Internal Verified Listing'], lastChecked: new Date().toISOString() };
+      }
+
       return {
-        ...job,
+        id: job.id,
+        title: job.title,
+        description: job.description,
+        company: job.company,
+        location: job.location,
+        salary: job.salary,
+        type: job.type,
+        category: job.category,
         minQualification: job.min_qualification,
         requiredSkills: job.required_skills,
         selectionProcess: job.selection_process,
         examDate: job.exam_date,
         examMode: job.exam_mode,
+        link: job.link,
         source: 'VConnectU',
         job_hash: jobHash,
         isNotification: false,
-        verificationDetails: job.verification_details ? (typeof job.verification_details === 'string' ? JSON.parse(job.verification_details) : job.verification_details) : {
-          confidenceScore: 100,
-          trustSignals: ['Internal Verified Listing', 'Direct Partnership'],
-          lastChecked: new Date().toISOString()
-        },
-        createdAt: job.created_at ? new Date(job.created_at).getTime() : Date.now()
+        isVerified: !!job.is_verified,
+        verificationDetails,
+        createdAt: job.created_at ? Number(job.created_at) : Date.now()
       };
     });
 
-    // 2. Fetch Real-time Internships/Jobs (AI Aggregated)
+    // 2. Fetch Real-time AI Jobs (fault-tolerant, non-blocking)
     let aiJobs = [];
     try {
       const searchTarget = queryStr || "Trending Internships";
-      const searchLoc = location || "India"; 
-      
+      const searchLoc = location || "India";
       const aiResponse = await Promise.race([
         getNativeExternalJobs(searchTarget, searchLoc),
-        new Promise(resolve => setTimeout(() => resolve([]), 15000))
+        new Promise(resolve => setTimeout(() => resolve([]), 12000))
       ]);
       aiJobs = aiResponse || [];
     } catch (aiErr) {
-      console.error('AI Job discovery fallback:', aiErr.message);
+      console.error('AI Job discovery failed (non-fatal):', aiErr.message);
     }
 
-    // 3. Deduplication: Only keep AI jobs that aren't already in localJobs
+    // 3. Deduplication
     const localHashes = new Set(formattedLocal.map(j => j.job_hash));
     const uniqueAIJobs = aiJobs.filter(job => !localHashes.has(job.job_hash));
 
     // 4. Combine and Sort
-    const unifiedJobs = [...formattedLocal, ...uniqueAIJobs].sort((a, b) => b.createdAt - a.createdAt);
+    const unifiedJobs = [...formattedLocal, ...uniqueAIJobs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
     res.json(unifiedJobs);
   } catch (error) {
-    console.error('Unified job search error:', error);
-    res.status(500).json({ error: 'Failed to fetch jobs' });
+    console.error('Unified job search CRITICAL error:', error);
+    // Last resort: return empty array instead of 500 so UI doesn't crash
+    res.json([]);
   }
 });
 

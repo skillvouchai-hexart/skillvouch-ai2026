@@ -5,6 +5,10 @@
     "framework": "vite",
     "rewrites": [
         {
+            "source": "/api/:path*",
+            "destination": "https://skillvouch-ai2026.onrender.com/api/:path*"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }

@@ -1,7 +1,7 @@
 // All AI calls are routed through the backend to keep API keys secure.
 // This service calls the backend /api/learning/* endpoints.
 
-const API_BASE = 'https://skillvouch-ai2026.onrender.com/api';
+const API_BASE = '/api';
 
 // Skill Suggestion – calls backend which calls Mistral securely
 export const suggestSkillsDirect = async (currentSkills: string[], currentGoals: string[] = []): Promise<string[]> => {

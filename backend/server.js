@@ -175,64 +175,54 @@ const log = (msg) => {
       }
     }
 
-    // 3. Auto-seed competitions if empty
-    const existingComps = await query('SELECT count(*) as count FROM competitions');
-    if (existingComps[0].count === 0) {
-      log('AUTO-SEED: Seeding competitions table...');
-      const seedData = competitionsService.getSeedData();
-      for (const comp of seedData) {
-        await query(
-          'INSERT INTO competitions (id, title, platform, description, link, prize, deadline, type, is_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [comp.id, comp.title, comp.platform, comp.description || '', comp.link, comp.prize || '', comp.deadline || null, comp.type, 1, Date.now(), Date.now()]
-        );
-      }
-      log(`AUTO-SEED: Successfully added ${seedData.length} competitions.`);
-    } else {
-      log(`AUTO-SEED: Competitions table already has ${existingComps[0].count} records.`);
+    // 3. Always reseed competitions (truncate + insert ensures complete data on every deploy)
+    log('AUTO-SEED: Reseeding competitions table...');
+    await query('DELETE FROM competitions');
+    const compSeedData = competitionsService.getSeedData();
+    for (const comp of compSeedData) {
+      await query(
+        'INSERT INTO competitions (id, title, platform, description, link, prize, deadline, type, is_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [comp.id, comp.title, comp.platform, comp.description || '', comp.link, comp.prize || '', comp.deadline || null, comp.type, 1, Date.now(), Date.now()]
+      );
     }
+    log(`AUTO-SEED: Successfully seeded ${compSeedData.length} competitions.`);
 
-    // 4. Auto-seed research papers if empty
-    const existingPapers = await query('SELECT count(*) as count FROM research_papers');
-    if (existingPapers[0].count === 0) {
-      log('AUTO-SEED: Seeding research_papers table with IEEE journals...');
-      const paperData = researchService.getIEEESeedData();
-      for (const paper of paperData) {
-        await query(
-          'INSERT INTO research_papers (id, title, publisher, conference, description, link, deadline, topic, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [paper.id, paper.title, paper.publisher, paper.conference || '', paper.description || '', paper.link, paper.deadline || null, paper.topic || '', Date.now(), Date.now()]
-        );
-      }
-      log(`AUTO-SEED: Successfully added ${paperData.length} IEEE journals.`);
+    // 4. Always reseed research papers
+    log('AUTO-SEED: Reseeding research_papers table with IEEE journals...');
+    await query('DELETE FROM research_papers');
+    const paperData = researchService.getIEEESeedData();
+    for (const paper of paperData) {
+      await query(
+        'INSERT INTO research_papers (id, title, publisher, conference, description, link, deadline, topic, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [paper.id, paper.title, paper.publisher, paper.conference || '', paper.description || '', paper.link, paper.deadline || null, paper.topic || '', Date.now(), Date.now()]
+      );
     }
+    log(`AUTO-SEED: Successfully seeded ${paperData.length} IEEE journals.`);
 
-    // 5. Auto-seed project ideas if empty
-    const existingIdeas = await query('SELECT count(*) as count FROM ideas');
-    if (existingIdeas[0].count === 0) {
-      log('AUTO-SEED: Seeding ideas table...');
-      const targetUserId = '41535aa1-dac4-45f1-ad42-9a925d472acd';
-      const seedData = ideaService.getSeedData(targetUserId);
-      for (const idea of seedData) {
-        await query(
-          'INSERT INTO ideas (id, title, problem, solution, technologies, impact, contact_email, contact_phone, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [idea.id, idea.title, idea.problem, idea.solution, idea.technologies, idea.impact, idea.contact_email, idea.contact_phone, idea.user_id, Date.now(), Date.now()]
-        );
-      }
-      log(`AUTO-SEED: Successfully added ${seedData.length} project ideas.`);
+    // 5. Always reseed project ideas
+    log('AUTO-SEED: Reseeding ideas table...');
+    await query('DELETE FROM ideas');
+    const targetUserId = '41535aa1-dac4-45f1-ad42-9a925d472acd';
+    const ideaSeedData = ideaService.getSeedData(targetUserId);
+    for (const idea of ideaSeedData) {
+      await query(
+        'INSERT INTO ideas (id, title, problem, solution, technologies, impact, contact_email, contact_phone, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [idea.id, idea.title, idea.problem, idea.solution, idea.technologies, idea.impact, idea.contact_email, idea.contact_phone, idea.user_id, Date.now(), Date.now()]
+      );
     }
+    log(`AUTO-SEED: Successfully seeded ${ideaSeedData.length} project ideas.`);
 
-    // 6. Auto-seed jobs if empty
-    const existingJobs = await query('SELECT count(*) as count FROM jobs');
-    if (existingJobs[0].count === 0) {
-      log('AUTO-SEED: Seeding jobs table...');
-      const seedData = jobService.getSeedData();
-      for (const job of seedData) {
-        await query(
-          'INSERT INTO jobs (id, title, company, location, salary, type, category, min_qualification, required_skills, description, link, deadline, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [job.id, job.title, job.company, job.location, job.salary || '', job.type, job.category || 'Private', job.min_qualification || 'UG', job.required_skills || '', job.description, job.link, job.deadline || null, Date.now()]
-        );
-      }
-      log(`AUTO-SEED: Successfully added ${seedData.length} jobs.`);
+    // 6. Always reseed jobs
+    log('AUTO-SEED: Reseeding jobs table...');
+    await query('DELETE FROM jobs');
+    const jobSeedData = jobService.getSeedData();
+    for (const job of jobSeedData) {
+      await query(
+        'INSERT INTO jobs (id, title, company, location, salary, type, category, min_qualification, required_skills, description, link, deadline, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [job.id, job.title, job.company, job.location, job.salary || '', job.type, job.category || 'Private', job.min_qualification || 'UG', job.required_skills || '', job.description, job.link, job.deadline || null, Date.now()]
+      );
     }
+    log(`AUTO-SEED: Successfully seeded ${jobSeedData.length} jobs.`);
   } catch (err) {
     console.error('DB MIGRATION/SEED ERROR:', err);
   }

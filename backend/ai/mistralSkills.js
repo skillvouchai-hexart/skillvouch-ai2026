@@ -4,11 +4,21 @@ dotenv.config();
 import { ChatMistralAI } from '@langchain/mistralai';
 import { PromptTemplate } from '@langchain/core/prompts';
 
-const mistral = new ChatMistralAI({
-  model: 'mistral-small',
-  temperature: 0.4,
-  apiKey: process.env.MISTRAL_API_KEY,
-});
+let mistralClient = null;
+
+const getMistralClient = () => {
+  if (!mistralClient) {
+    if (!process.env.MISTRAL_API_KEY) {
+      throw new Error('MISTRAL_API_KEY is not defined in environment variables');
+    }
+    mistralClient = new ChatMistralAI({
+      model: 'mistral-small',
+      temperature: 0.4,
+      apiKey: process.env.MISTRAL_API_KEY,
+    });
+  }
+  return mistralClient;
+};
 
 // Skill Suggestion Prompt
 const skillSuggestionPrompt = PromptTemplate.fromTemplate(`
@@ -70,7 +80,7 @@ export const suggestSkills = async (currentSkills = [], currentGoals = []) => {
       randomSeed: Math.floor(Math.random() * 1000000).toString()
     });
 
-    const response = await mistral.invoke(formattedPrompt);
+    const response = await getMistralClient().invoke(formattedPrompt);
     const content = response.content;
 
     const cleanContent = content.replace(/```json\n?|```/g, '').trim();
@@ -100,18 +110,38 @@ export const generateRoadmap = async (skill) => {
       console.log(`Generating roadmap for ${skill} (Attempt ${attempts + 1})...`);
       const formattedPrompt = await roadmapPrompt.format({ skill });
 
-      const response = await mistral.invoke(formattedPrompt);
+      const response = await getMistralClient().invoke(formattedPrompt);
       const content = response.content;
 
-      const cleanContent = content.replace(/```json\n?|```/g, '').trim();
+      // Robust JSON parsing
+      let cleanContent = content.trim();
+      if (cleanContent.startsWith('```json')) {
+        cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanContent.startsWith('```')) {
+        cleanContent = cleanContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
 
       let data;
       try {
         data = JSON.parse(cleanContent);
       } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.error('Raw Content:', content);
-        throw new Error('Invalid JSON format');
+        // Fallback: try to extract JSON block
+        const firstBrace = cleanContent.indexOf('{');
+        const lastBrace = cleanContent.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          try {
+            data = JSON.parse(cleanContent.substring(firstBrace, lastBrace + 1));
+          } catch (e) {
+            // Very aggressive recovery: try to fix missing brackets in resources arrays
+            let fixedContent = cleanContent.substring(firstBrace, lastBrace + 1);
+            fixedContent = fixedContent.replace(/("resources":\s*\[[^\]]*?)(?=\s*[},])/g, '$1]');
+            try {
+              data = JSON.parse(fixedContent);
+            } catch (e2) { throw parseError; }
+          }
+        } else {
+          throw parseError;
+        }
       }
 
       if (!data.roadmap || !Array.isArray(data.roadmap)) {
@@ -191,7 +221,7 @@ export const analyzeMatch = async (user1, user2) => {
       user2Bio: user2.bio || ''
     });
 
-    const response = await mistral.invoke(formattedPrompt);
+    const response = await getMistralClient().invoke(formattedPrompt);
     const content = response.content;
 
     const cleanContent = content.replace(/```json\n?|```/g, '').trim();
@@ -204,11 +234,6 @@ export const analyzeMatch = async (user1, user2) => {
     };
   } catch (error) {
     console.error('Match analysis error:', error);
-    // Return fallback instead of throwing to keep UI working
-    return {
-      score: 0,
-      reasoning: 'AI analysis failed. Please try again.',
-      commonInterests: []
-    };
+    throw new Error(`Match analysis failed: ${error.message}`);
   }
 };

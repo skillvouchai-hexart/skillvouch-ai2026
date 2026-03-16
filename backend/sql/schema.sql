@@ -10,7 +10,27 @@ CREATE TABLE IF NOT EXISTS users (
   skills_to_learn TEXT NOT NULL,
   rating FLOAT NOT NULL,
   learning_hours INT DEFAULT 0,
-  weekly_activity INT DEFAULT 0
+  weekly_activity INT DEFAULT 0,
+  first_name VARCHAR(255) NULL,
+  last_name VARCHAR(255) NULL,
+  dob DATE NULL,
+  address TEXT NULL,
+  qualification ENUM('TENTH', 'TWELFTH', 'UG', 'PG') NULL,
+  tenth_school VARCHAR(255) NULL,
+  tenth_percent FLOAT NULL,
+  twelfth_school VARCHAR(255) NULL,
+  twelfth_college VARCHAR(255) NULL,
+  twelfth_percent FLOAT NULL,
+  ug_college VARCHAR(255) NULL,
+  ug_university VARCHAR(255) NULL,
+  ug_percent FLOAT NULL,
+  pg_college VARCHAR(255) NULL,
+  pg_university VARCHAR(255) NULL,
+  pg_percent FLOAT NULL,
+  marksheet_10th_url TEXT NULL,
+  marksheet_12th_url TEXT NULL,
+  resume_url TEXT NULL,
+  highest_qual_marksheet_url TEXT NULL
 );
 
 CREATE TABLE IF NOT EXISTS exchange_requests (
@@ -80,4 +100,75 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
   completed_at BIGINT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (quiz_id) REFERENCES quizzes(id)
+);
+
+CREATE TABLE IF NOT EXISTS jobs (
+  id VARCHAR(64) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL,
+  company VARCHAR(255) NOT NULL,
+  location VARCHAR(255) NOT NULL,
+  salary VARCHAR(255) NULL,
+  type VARCHAR(50) DEFAULT 'Full-time',
+  category ENUM('Private', 'Government') DEFAULT 'Private',
+  min_qualification ENUM('TENTH', 'TWELFTH', 'UG', 'PG') DEFAULT 'TENTH',
+  required_skills TEXT NULL,
+  deadline BIGINT NULL,
+  selection_process TEXT NULL,
+  exam_date BIGINT NULL,
+  exam_mode VARCHAR(50) NULL,
+  link TEXT NULL,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS job_applications (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) NOT NULL,
+  job_id VARCHAR(64) NOT NULL,
+  status ENUM('PENDING', 'ACCEPTED', 'REJECTED') DEFAULT 'PENDING',
+  applied_at BIGINT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS competitions (
+  id VARCHAR(64) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  platform VARCHAR(255) NOT NULL,
+  description TEXT NULL,
+  link TEXT NOT NULL,
+  prize VARCHAR(255) NULL,
+  deadline BIGINT NULL,
+  start_date BIGINT NULL,
+  type VARCHAR(100) NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS research_papers (
+  id VARCHAR(64) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  publisher VARCHAR(255) NOT NULL,
+  conference VARCHAR(255) NULL,
+  description TEXT NULL,
+  link TEXT NOT NULL,
+  deadline BIGINT NULL,
+  topic VARCHAR(255) NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ideas (
+  id VARCHAR(64) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  problem TEXT NOT NULL,
+  solution TEXT NOT NULL,
+  technologies TEXT NOT NULL,
+  impact TEXT NOT NULL,
+  contact_email VARCHAR(255) NOT NULL,
+  contact_phone VARCHAR(50) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

@@ -5,11 +5,21 @@ import { ChatMistralAI } from '@langchain/mistralai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { generateSkillAssessmentQuiz } from './skillAssessmentEngine.js';
 
-const mistral = new ChatMistralAI({
-  model: 'mistral-small',
-  temperature: 0.4,
-  apiKey: process.env.MISTRAL_API_KEY,
-});
+let mistralClient = null;
+
+const getMistralClient = () => {
+  if (!mistralClient) {
+    if (!process.env.MISTRAL_API_KEY) {
+      throw new Error('MISTRAL_API_KEY is not defined in environment variables');
+    }
+    mistralClient = new ChatMistralAI({
+      model: 'mistral-small',
+      temperature: 0.4,
+      apiKey: process.env.MISTRAL_API_KEY,
+    });
+  }
+  return mistralClient;
+};
 
 // Quiz cache for faster responses
 const quizCache = new Map();
@@ -300,130 +310,40 @@ export const generateQuiz = async (
   const startTime = Date.now();
 
   try {
-    // Use the skill assessment engine for all requests
-    if (count === 10 && ['beginner', 'intermediate', 'advanced', 'expert'].includes(difficulty)) {
-      console.log(`Using skill assessment engine for ${skill} (${difficulty})`);
-
-      const assessmentQuiz = await generateSkillAssessmentQuiz(skill, difficulty, count);
-
-      // Convert assessment quiz format to frontend format
-      const questions = assessmentQuiz.questions.map(q => {
-        // Convert options object to array
-        const optionsArray = [q.options.A, q.options.B, q.options.C, q.options.D];
-
-        // Find correct answer index
-        const correctAnswerIndex = q.correctAnswer.charCodeAt(0) - 'A'.charCodeAt(0);
-
-        return {
-          question: q.question,
-          codeSnippet: q.codeSnippet || '', // Map code snippet from assessment
-          expectedOutput: q.expectedOutput || '', // Add expectedOutput field
-          options: optionsArray,
-          correctAnswerIndex: correctAnswerIndex
-        };
-      });
-
-      // Cache the results
-      setCachedQuiz(skill, difficulty, count, questions);
-
-      const generationTime = Date.now() - startTime;
-      console.log(`Skill assessment quiz generated in ${generationTime}ms`);
-      return questions;
-    }
-
-    // Check cache first for other cases
+    // Check cache first
     const cachedQuestions = getCachedQuiz(skill, difficulty, count);
     if (cachedQuestions) {
       console.log(`Quiz generated in ${Date.now() - startTime}ms (cached)`);
       return cachedQuestions;
     }
 
-    // Fallback to original Mistral logic for other cases
-    let regenerationAttempt = 0;
-    const maxRegenerations = 1;
+    console.log(`Using unified skill assessment engine for ${skill} (${difficulty})`);
+    const assessmentQuiz = await generateSkillAssessmentQuiz(skill, difficulty, count);
 
-    while (regenerationAttempt <= maxRegenerations) {
-      try {
-        console.log(`Starting fallback Mistral quiz generation for ${skill} (${difficulty}) - Attempt ${regenerationAttempt + 1}`);
+    // Convert assessment quiz format to frontend format
+    const questions = assessmentQuiz.questions.map(q => {
+      // Convert options object to array
+      const optionsArray = [q.options.A, q.options.B, q.options.C, q.options.D];
 
-        // Create domain-specific prompt
-        const domainPrompt = createDomainSpecificPrompt(skill, difficulty, count);
+      // Find correct answer index
+      const correctAnswerIndex = q.correctAnswer.charCodeAt(0) - 'A'.charCodeAt(0);
 
-        const formattedPrompt = await quizPrompt.format({
-          domainPrompt,
-          count: count.toString(),
-        });
+      return {
+        question: q.question,
+        codeSnippet: q.codeSnippet || '', 
+        expectedOutput: q.expectedOutput || '', 
+        options: optionsArray,
+        correctAnswerIndex: correctAnswerIndex
+      };
+    });
 
-        const response = await mistral.invoke(formattedPrompt);
-        const content = response.content;
+    // Cache the results
+    setCachedQuiz(skill, difficulty, count, questions);
 
-        if (!content) {
-          throw new Error('No content received from Mistral AI');
-        }
+    const generationTime = Date.now() - startTime;
+    console.log(`Unified quiz generated in ${generationTime}ms`);
+    return questions;
 
-        // Parse JSON response
-        let cleanContent = content.replace(/```json\n?|```/g, '').trim();
-
-        if (!cleanContent.startsWith('{')) {
-          cleanContent = '{' + cleanContent;
-        }
-        if (!cleanContent.endsWith('}')) {
-          cleanContent = cleanContent + '}';
-        }
-
-        let quizData;
-        try {
-          quizData = JSON.parse(cleanContent);
-        } catch (parseError) {
-          console.error('JSON parse error:', parseError);
-          throw new Error(`Invalid JSON response: ${parseError.message}`);
-        }
-
-        if (!quizData.questions || !Array.isArray(quizData.questions)) {
-          throw new Error('Invalid quiz structure: missing questions array');
-        }
-
-        if (quizData.questions.length !== count) {
-          console.warn(`Expected ${count} questions, got ${quizData.questions.length}`);
-        }
-
-        const validatedQuestions = [];
-        for (let i = 0; i < quizData.questions.length; i++) {
-          const validatedQuestion = validateAndRepairQuestion(quizData.questions[i], i);
-          validatedQuestions.push(validatedQuestion);
-        }
-
-        setCachedQuiz(skill, difficulty, count, validatedQuestions);
-
-        const generationTime = Date.now() - startTime;
-        console.log(`Fallback quiz generated in ${generationTime}ms (Mistral AI)`);
-        return validatedQuestions;
-
-      } catch (error) {
-        console.error(`Quiz generation error (attempt ${regenerationAttempt + 1}):`, error);
-
-        if (regenerationAttempt >= maxRegenerations) {
-          // Final attempt failed - return detailed error
-          if (error.message.includes('correctAnswer')) {
-            throw new Error(`Quiz validation failed: ${error.message}. Please try regenerating.`);
-          } else if (error.message.includes('API key')) {
-            throw new Error('Mistral API key is invalid or missing');
-          } else if (error.message.includes('rate limit')) {
-            throw new Error('Mistral API rate limit exceeded, please try again');
-          } else if (error.message.includes('network')) {
-            throw new Error('Network error connecting to Mistral AI');
-          } else {
-            // General error
-            throw new Error(`Failed to generate quiz: ${error.message}`);
-          }
-        }
-
-        // Try regeneration
-        regenerationAttempt++;
-        console.log(`Retrying quiz generation... (attempt ${regenerationAttempt + 1})`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * regenerationAttempt));
-      }
-    }
   } catch (error) {
     console.error('Quiz generation error:', error);
     throw new Error(`Failed to generate quiz: ${error.message}`);

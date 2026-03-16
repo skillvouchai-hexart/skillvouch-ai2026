@@ -1,7 +1,7 @@
-import { User, ExchangeRequest, Message, ExchangeFeedback } from '../types';
+import { User, ExchangeRequest, Message, ExchangeFeedback, Job, Idea, Competition, ResearchPaper, ResumeAnalysis, InterviewData } from '../types';
 import { suggestSkillsDirect, generateRoadmapDirect } from './mistralDirectService';
 
-const API_BASE_URL = 'https://skillvouch-ai2026.onrender.com/api';
+const API_BASE_URL = '/api';
 
 
 // Helper to simulate delay
@@ -346,5 +346,120 @@ export const apiService = {
       console.error('Roadmap generation failed:', error);
       throw new Error('Failed to generate roadmap');
     }
-  }
+  },
+
+  // --- Career Features (Resume & Interview) ---
+  analyzeResume: async (formData: FormData): Promise<ResumeAnalysis> => {
+    const response = await fetch(`${API_BASE_URL}/resume/analyze`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.details || errorData.error || "Failed to analyze resume");
+    }
+    return response.json();
+  },
+
+  setupInterview: async (formData: FormData): Promise<InterviewData> => {
+    const response = await fetch(`${API_BASE_URL}/interview/setup`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) throw new Error("Failed to setup interview");
+    return response.json();
+  },
+
+  // --- Jobs ---
+  getJobs: async (query?: string, location?: string, sector?: string, role?: string, experience?: string, remote?: boolean): Promise<Job[]> => {
+    let url = `${API_BASE_URL}/jobs?`;
+    if (query) url += `q=${encodeURIComponent(query)}&`;
+    if (location) url += `l=${encodeURIComponent(location)}&`;
+    if (sector) url += `sector=${encodeURIComponent(sector)}&`;
+    if (role) url += `role=${encodeURIComponent(role)}&`;
+    if (experience) url += `experience=${encodeURIComponent(experience)}&`;
+    if (remote) url += `remote=true&`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to fetch jobs");
+    return response.json();
+  },
+
+  applyForJob: async (userId: string, jobId: string, jobData: any, applicantData: any) => {
+    const response = await fetch(`${API_BASE_URL}/jobs/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, jobId, jobData, applicantData }),
+    });
+    return response.json();
+  },
+
+  getMyApplications: async (userId: string) => {
+    const response = await fetch(`${API_BASE_URL}/jobs/my-applications/${userId}`);
+    return response.json();
+  },
+
+  getExternalJobLinks: async (query: string, location: string): Promise<{ jobs: Job[] }> => {
+    const url = `${API_BASE_URL}/jobs/external?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to fetch external job links");
+    return response.json();
+  },
+
+  syncWorldwideNotifications: async (): Promise<{ notifications: Job[] }> => {
+    const response = await fetch(`${API_BASE_URL}/jobs/sync-worldwide`);
+    if (!response.ok) throw new Error("Failed to sync worldwide notifications");
+    return response.json();
+  },
+
+  // --- Ideas ---
+  getIdeas: async (query?: string, userId?: string): Promise<Idea[]> => {
+    let url = `${API_BASE_URL}/ideas?`;
+    if (query) url += `q=${encodeURIComponent(query)}&`;
+    if (userId) url += `userId=${encodeURIComponent(userId)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to fetch ideas");
+    return response.json();
+  },
+
+  postIdea: async (ideaData: Partial<Idea>) => {
+    const response = await fetch(`${API_BASE_URL}/ideas`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ideaData),
+    });
+    if (!response.ok) throw new Error("Failed to post idea");
+    return response.json();
+  },
+
+  // --- Competitions & Research Papers ---
+  getCompetitions: async (): Promise<Competition[]> => {
+    const response = await fetch(`${API_BASE_URL}/competitions`);
+    if (!response.ok) throw new Error("Failed to fetch competitions");
+    return response.json();
+  },
+
+  syncCompetitions: async (): Promise<Competition[]> => {
+    const response = await fetch(`${API_BASE_URL}/competitions/sync`, {
+      method: 'POST'
+    });
+    if (!response.ok) throw new Error("Failed to sync competitions");
+    const data = await response.json();
+    return data.competitions;
+  },
+
+  getResearchPapers: async (): Promise<ResearchPaper[]> => {
+    const response = await fetch(`${API_BASE_URL}/research-papers`);
+    if (!response.ok) throw new Error("Failed to fetch research papers");
+    return response.json();
+  },
+
+  submitQuery: async (data: { userId: string; email: string; userName: string; query: string }) => {
+    const response = await fetch(`${API_BASE_URL}/queries/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error("Failed to submit query");
+    return response.json();
+  },
 };

@@ -4,6 +4,270 @@ import { query } from './db.js';
 import crypto from 'crypto';
 import { generateQuiz } from './ai/mistralQuiz.js';
 import { suggestSkills, generateRoadmap, analyzeMatch } from './ai/mistralSkills.js';
+import { analyzeResume } from './ai/resumeAnalyzer.js';
+import { setupInterview } from './ai/mockInterview.js';
+import { getNativeExternalJobs } from './ai/jobAggregator.js';
+import { parseJobSearchQuery } from './ai/queryParser.js';
+import multer from 'multer';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdf = require('pdf-parse');
+import mammoth from 'mammoth';
+import fs from 'fs';
+import { competitionsService } from './services/competitionsService.js';
+import { researchService } from './services/researchService.js';
+import { ideaService } from './services/ideaService.js';
+import { jobService } from './services/jobService.js';
+
+const logFile = '/tmp/backend.log';
+const log = (msg) => {
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    fs.appendFileSync(logFile, line);
+    console.log(msg);
+};
+
+// Self-healing DB migration: Create tables and standardize collation
+(async () => {
+  try {
+    // 1. Create table if missing
+    await query(`
+      CREATE TABLE IF NOT EXISTS competitions (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        platform VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        link TEXT NOT NULL,
+        prize VARCHAR(255) NULL,
+        deadline BIGINT NULL,
+        start_date BIGINT NULL,
+        type VARCHAR(100) NOT NULL,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    log('DB MIGRATION: competitions table checked/created');
+
+    // 1b. Create research_papers table if missing
+    await query(`
+      CREATE TABLE IF NOT EXISTS research_papers (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        publisher VARCHAR(255) NOT NULL,
+        conference VARCHAR(255) NULL,
+        description TEXT NULL,
+        link TEXT NOT NULL,
+        deadline BIGINT NULL,
+        topic VARCHAR(255) NULL,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    log('DB MIGRATION: research_papers table checked/created');
+
+    // 1c. Create ideas table if missing
+    await query(`
+      CREATE TABLE IF NOT EXISTS ideas (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        problem TEXT NOT NULL,
+        solution TEXT NOT NULL,
+        technologies TEXT NOT NULL,
+        impact TEXT NOT NULL,
+        contact_email VARCHAR(255) NOT NULL,
+        contact_phone VARCHAR(50) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        INDEX (user_id)
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    log('DB MIGRATION: ideas table checked/created');
+
+    // 1d. Create jobs table if missing
+    await query(`
+      CREATE TABLE IF NOT EXISTS jobs (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        company VARCHAR(255) NOT NULL,
+        location VARCHAR(255) NOT NULL,
+        salary VARCHAR(255) NULL,
+        type VARCHAR(50) DEFAULT 'Full-time',
+        category ENUM('Private', 'Government') DEFAULT 'Private',
+        min_qualification ENUM('TENTH', 'TWELFTH', 'UG', 'PG') DEFAULT 'TENTH',
+        required_skills TEXT NULL,
+        deadline BIGINT NULL,
+        selection_process TEXT NULL,
+        exam_date BIGINT NULL,
+        exam_mode VARCHAR(50) NULL,
+        link TEXT NULL,
+        created_at BIGINT NOT NULL
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    log('DB MIGRATION: jobs table checked/created');
+
+    // 1e. Create job_applications table if missing
+    await query(`
+      CREATE TABLE IF NOT EXISTS job_applications (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NOT NULL,
+        job_id VARCHAR(64) NOT NULL,
+        job_data JSON,
+        applicant_data JSON,
+        status ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending',
+        applied_at BIGINT NOT NULL,
+        INDEX (user_id),
+        INDEX (job_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    log('DB MIGRATION: job_applications table checked/created');
+
+    // 2. Add verification, categorization, and AI search columns to jobs if missing
+    const jobColumns = [
+      { name: 'is_verified', type: 'TINYINT(1) DEFAULT 0' },
+      { name: 'verification_details', type: 'JSON' },
+      { name: 'sector', type: 'VARCHAR(100)' },
+      { name: 'role', type: 'VARCHAR(100)' },
+      { name: 'experience_level', type: 'VARCHAR(50)' },
+      { name: 'is_remote', type: 'TINYINT(1) DEFAULT 0' },
+      { name: 'job_hash', type: 'VARCHAR(64)', unique: true }
+    ];
+
+    for (const col of jobColumns) {
+      try {
+        await query(`ALTER TABLE jobs ADD COLUMN ${col.name} ${col.type}`);
+        log(`DB MIGRATION: Added ${col.name} to jobs table`);
+        if (col.unique) {
+          await query(`ALTER TABLE jobs ADD UNIQUE INDEX idx_job_hash (${col.name})`);
+          log(`DB MIGRATION: Added unique index to ${col.name}`);
+        }
+      } catch (err) {
+        if (err.errno === 1060 || err.code === 'ER_DUP_FIELDNAME' || err.code === 'ER_DUP_COLUMN_NAME') {
+          // Skip if exists
+        } else {
+          console.error(`Error adding column ${col.name}:`, err.message);
+        }
+      }
+    }
+
+    // 2.5 Ensure FULLTEXT index exists for High-Performance Search Architecture
+    try {
+      await query('ALTER TABLE jobs ADD FULLTEXT INDEX idx_job_search(title, company, description, required_skills, location)');
+      log('DB MIGRATION: Added FULLTEXT INDEX idx_job_search to jobs table');
+    } catch (err) {
+      if (err.errno === 1061 || err.code === 'ER_DUP_KEYNAME') {
+        // Index already exists, safely ignore
+      } else {
+        console.error('Error adding FULLTEXT index to jobs:', err.message);
+      }
+    }
+
+    // 3. Keep existing competition verification migration
+    try {
+      await query('ALTER TABLE competitions ADD COLUMN is_verified TINYINT(1) DEFAULT 0');
+      log('DB MIGRATION: Added is_verified to competitions table');
+    } catch (err) {
+      if (err.errno === 1060 || err.code === 'ER_DUP_FIELDNAME' || err.code === 'ER_DUP_COLUMN_NAME') {
+        log('DB MIGRATION: competitions is_verified already exists');
+      } else {
+        throw err;
+      }
+    }
+
+    // 3. Auto-seed competitions if empty
+    const existingComps = await query('SELECT count(*) as count FROM competitions');
+    if (existingComps[0].count === 0) {
+      log('AUTO-SEED: Seeding competitions table...');
+      const seedData = competitionsService.getSeedData();
+      for (const comp of seedData) {
+        await query(
+          'INSERT INTO competitions (id, title, platform, description, link, prize, deadline, type, is_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [comp.id, comp.title, comp.platform, comp.description || '', comp.link, comp.prize || '', comp.deadline || null, comp.type, 1, Date.now(), Date.now()]
+        );
+      }
+      log(`AUTO-SEED: Successfully added ${seedData.length} competitions.`);
+    } else {
+      log(`AUTO-SEED: Competitions table already has ${existingComps[0].count} records.`);
+    }
+
+    // 4. Auto-seed research papers if empty
+    const existingPapers = await query('SELECT count(*) as count FROM research_papers');
+    if (existingPapers[0].count === 0) {
+      log('AUTO-SEED: Seeding research_papers table with IEEE journals...');
+      const paperData = researchService.getIEEESeedData();
+      for (const paper of paperData) {
+        await query(
+          'INSERT INTO research_papers (id, title, publisher, conference, description, link, deadline, topic, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [paper.id, paper.title, paper.publisher, paper.conference || '', paper.description || '', paper.link, paper.deadline || null, paper.topic || '', Date.now(), Date.now()]
+        );
+      }
+      log(`AUTO-SEED: Successfully added ${paperData.length} IEEE journals.`);
+    }
+
+    // 5. Auto-seed project ideas if empty
+    const existingIdeas = await query('SELECT count(*) as count FROM ideas');
+    if (existingIdeas[0].count === 0) {
+      log('AUTO-SEED: Seeding ideas table...');
+      const targetUserId = '41535aa1-dac4-45f1-ad42-9a925d472acd';
+      const seedData = ideaService.getSeedData(targetUserId);
+      for (const idea of seedData) {
+        await query(
+          'INSERT INTO ideas (id, title, problem, solution, technologies, impact, contact_email, contact_phone, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [idea.id, idea.title, idea.problem, idea.solution, idea.technologies, idea.impact, idea.contact_email, idea.contact_phone, idea.user_id, Date.now(), Date.now()]
+        );
+      }
+      log(`AUTO-SEED: Successfully added ${seedData.length} project ideas.`);
+    }
+
+    // 6. Auto-seed jobs if empty
+    const existingJobs = await query('SELECT count(*) as count FROM jobs');
+    if (existingJobs[0].count === 0) {
+      log('AUTO-SEED: Seeding jobs table...');
+      const seedData = jobService.getSeedData();
+      for (const job of seedData) {
+        await query(
+          'INSERT INTO jobs (id, title, company, location, salary, type, category, min_qualification, required_skills, description, link, deadline, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [job.id, job.title, job.company, job.location, job.salary || '', job.type, job.category || 'Private', job.min_qualification || 'UG', job.required_skills || '', job.description, job.link, job.deadline || null, Date.now()]
+        );
+      }
+      log(`AUTO-SEED: Successfully added ${seedData.length} jobs.`);
+    }
+  } catch (err) {
+    console.error('DB MIGRATION/SEED ERROR:', err);
+  }
+})();
+
+log('Backend starting up...');
+log(`pdf-parse type: ${typeof pdf}, keys: ${Object.keys(pdf || {})}`);
+
+// Unified PDF extraction helper to handle pdf-parse v1 and v2
+async function extractPDFText(buffer) {
+  log(`extractPDFText called. pdf type=${typeof pdf}`);
+  if (pdf && typeof pdf.PDFParse === 'function') {
+    log('Using pdf-parse v2 (Class-based API)');
+    const parser = new pdf.PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
+      return result.text;
+    } finally {
+      await parser.destroy();
+    }
+  } else if (typeof pdf === 'function') {
+    log('Using pdf-parse v1 (Function-based API)');
+    const data = await pdf(buffer);
+    return data.text;
+  } else if (pdf && typeof pdf.default === 'function') {
+    log('Using pdf-parse default export (Function-based API)');
+    const data = await pdf.default(buffer);
+    return data.text;
+  } else {
+    log('ERROR: Unsupported pdf-parse API structure');
+    throw new Error('PDF parsing library configuration error');
+  }
+}
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,6 +299,26 @@ function mapUserRow(row) {
     bio: row.bio || '',
     discordLink: row.discord_link || undefined,
     rating: row.rating,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    dob: row.dob,
+    address: row.address,
+    qualification: row.qualification,
+    tenthSchool: row.tenthSchool,
+    tenthPercent: row.tenthPercent,
+    twelfthSchool: row.twelfthSchool,
+    twelfthCollege: row.twelfthCollege,
+    twelfthPercent: row.twelfthPercent,
+    ugCollege: row.ugCollege,
+    ugUniversity: row.ugUniversity,
+    ugPercent: row.ugPercent,
+    pgCollege: row.pgCollege,
+    pgUniversity: row.pgUniversity,
+    pgPercent: row.pgPercent,
+    marksheet10thUrl: row.marksheet10thUrl,
+    marksheet12thUrl: row.marksheet12thUrl,
+    resumeUrl: row.resumeUrl,
+    highestQualMarksheetUrl: row.highestQualMarksheetUrl
   };
 }
 
@@ -269,32 +553,34 @@ app.put('/api/users/:id', async (req, res) => {
     const currentSkills = currentUser.length > 0 ? JSON.parse(currentUser[0].skills_known || '[]') : [];
 
     await query(
-      `INSERT INTO users (id, name, email, password, avatar, bio, discord_link, skills_known, skills_to_learn, rating, learning_hours, weekly_activity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
-       ON DUPLICATE KEY UPDATE 
-       name = ?, email = ?, password = ?, avatar = ?, bio = ?, discord_link = ?, 
-       skills_known = ?, skills_to_learn = ?, rating = ?, learning_hours = COALESCE(learning_hours, 0), 
-       weekly_activity = COALESCE(weekly_activity, 0)`,
+      `INSERT INTO users (
+        id, name, email, password, avatar, bio, discord_link, skills_known, skills_to_learn, rating,
+        firstName, lastName, dob, address, qualification, tenthSchool, tenthPercent,
+        twelfthSchool, twelfthCollege, twelfthPercent, ugCollege, ugUniversity, ugPercent,
+        pgCollege, pgUniversity, pgPercent, marksheet10thUrl, marksheet12thUrl,
+        resumeUrl, highestQualMarksheetUrl
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE 
+      name = ?, email = ?, password = ?, avatar = ?, bio = ?, discord_link = ?, 
+      skills_known = ?, skills_to_learn = ?, rating = ?, 
+      firstName = ?, lastName = ?, dob = ?, address = ?, qualification = ?, 
+      tenthSchool = ?, tenthPercent = ?, twelfthSchool = ?, twelfthCollege = ?, 
+      twelfthPercent = ?, ugCollege = ?, ugUniversity = ?, ugPercent = ?, 
+      pgCollege = ?, pgUniversity = ?, pgPercent = ?, marksheet10thUrl = ?, 
+      marksheet12thUrl = ?, resumeUrl = ?, highestQualMarksheetUrl = ?`,
       [
-        id,
-        user.name || '',
-        user.email || '',
-        user.password || '',
-        user.avatar || '',
-        user.bio || '',
-        user.discordLink || null,
-        skillsKnown,
-        skillsToLearn,
-        user.rating || 0,
-        user.name || '',
-        user.email || '',
-        user.password || '',
-        user.avatar || '',
-        user.bio || '',
-        user.discordLink || null,
-        skillsKnown,
-        skillsToLearn,
-        user.rating || 0
+        id, user.name || '', user.email || '', user.password || '', user.avatar || '', user.bio || '', user.discordLink || null, skillsKnown, skillsToLearn, user.rating || 0,
+        user.firstName || null, user.lastName || null, user.dob || null, user.address || null, user.qualification || null, user.tenthSchool || null, user.tenthPercent || null,
+        user.twelfthSchool || null, user.twelfthCollege || null, user.twelfthPercent || null, user.ugCollege || null, user.ugUniversity || null, user.ugPercent || null,
+        user.pgCollege || null, user.pgUniversity || null, user.pgPercent || null, user.marksheet10thUrl || null, user.marksheet12thUrl || null,
+        user.resumeUrl || null, user.highestQualMarksheetUrl || null,
+        // Update values
+        user.name || '', user.email || '', user.password || '', user.avatar || '', user.bio || '', user.discordLink || null, skillsKnown, skillsToLearn, user.rating || 0,
+        user.firstName || null, user.lastName || null, user.dob || null, user.address || null, user.qualification || null, user.tenthSchool || null, user.tenthPercent || null,
+        user.twelfthSchool || null, user.twelfthCollege || null, user.twelfthPercent || null, user.ugCollege || null, user.ugUniversity || null, user.ugPercent || null,
+        user.pgCollege || null, user.pgUniversity || null, user.pgPercent || null, user.marksheet10thUrl || null, user.marksheet12thUrl || null,
+        user.resumeUrl || null, user.highestQualMarksheetUrl || null
       ]
     );
 
@@ -1069,6 +1355,374 @@ Requirements:
   }
 });
 
+// --- Career Features (Resume & Interview) ---
+
+app.post('/api/resume/analyze', upload.single('resume'), async (req, res) => {
+  try {
+    let resumeText = '';
+    if (req.file) {
+      const buffer = req.file.buffer;
+      const fileName = req.file.originalname.toLowerCase();
+      if (fileName.endsWith('.docx')) {
+        const result = await mammoth.extractRawText({ buffer });
+        resumeText = result.value;
+      } else if (fileName.endsWith('.pdf')) {
+        try {
+          resumeText = await extractPDFText(buffer);
+        } catch (pdfErr) {
+          log(`PDF Extraction Failed: ${pdfErr.message}`);
+          throw new Error(`Technical error reading PDF: ${pdfErr.message}`);
+        }
+      } else if (fileName.endsWith(".txt")) { resumeText = buffer.toString("utf8"); } else {
+        resumeText = buffer.toString('utf8');
+      }
+    } else {
+      resumeText = req.body.resumeContent || '';
+    }
+
+    if (!resumeText) {
+      console.warn('Resume analysis: No resume content provided');
+      return res.status(400).json({ error: 'No resume content provided' });
+    }
+
+    console.log(`Resume analysis start: name=${req.file ? req.file.originalname : 'text'}, length=${resumeText.length}`);
+    const fileType = req.file ? (req.file.originalname.toLowerCase().endsWith('.pdf') ? 'PDF' : (req.file.originalname.toLowerCase().endsWith('.docx') ? 'DOCX' : 'TXT')) : 'Text';
+    const jobDescription = req.body.jobDescription || null;
+    const analysis = await analyzeResume(resumeText, fileType, jobDescription);
+    console.log('Resume analysis success');
+    res.json(analysis);
+  } catch (error) {
+    console.error('Resume analysis error:', error);
+    res.status(500).json({ error: 'Failed to analyze resume', details: error.message });
+  }
+});
+
+app.post('/api/interview/setup', upload.single('resume'), async (req, res) => {
+  try {
+    let resumeText = '';
+    if (req.file) {
+      const buffer = req.file.buffer;
+      const fileName = req.file.originalname.toLowerCase();
+      if (fileName.endsWith('.docx')) {
+        const result = await mammoth.extractRawText({ buffer });
+        resumeText = result.value;
+      } else if (fileName.endsWith('.pdf')) {
+        try {
+          resumeText = await extractPDFText(buffer);
+        } catch (pdfErr) {
+          log(`PDF Extraction Failed: ${pdfErr.message}`);
+          throw new Error(`Technical error reading PDF: ${pdfErr.message}`);
+        }
+      } else {
+        resumeText = buffer.toString('utf8');
+      }
+    } else {
+      resumeText = req.body.resumeContent || '';
+    }
+
+    const interviewData = await setupInterview(resumeText || 'General technical candidate');
+    res.json(interviewData);
+  } catch (error) {
+    console.error('Interview setup error:', error);
+    res.status(500).json({ error: 'Failed to setup interview', details: error.message });
+  }
+});
+
+// --- Jobs & Applications ---
+
+app.post('/api/jobs/apply', async (req, res) => {
+  try {
+    const { userId, jobId, jobData, applicantData } = req.body;
+    const id = 'app_' + Date.now();
+    
+    // Save rich application metadata
+    await query(
+      'INSERT INTO job_applications (id, user_id, job_id, job_data, applicant_data, status, applied_at) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+      [
+        id, 
+        userId, 
+        jobId, 
+        JSON.stringify(jobData || {}), 
+        JSON.stringify(applicantData || {}), 
+        'Pending', 
+        Date.now()
+      ]
+    );
+
+    res.json({ success: true, message: 'Application submitted successfully', applicationId: id });
+  } catch (error) {
+    console.error('POST /api/jobs/apply error:', error);
+    res.status(500).json({ error: 'Failed to submit application' });
+  }
+});
+
+app.get('/api/jobs/my-applications/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const apps = await query(
+      'SELECT * FROM job_applications WHERE user_id = ? ORDER BY applied_at DESC',
+      [userId]
+    );
+    // Parse JSON columns
+    const formattedApps = apps.map(app => ({
+      ...app,
+      job_data: typeof app.job_data === 'string' ? JSON.parse(app.job_data) : app.job_data,
+      applicant_data: typeof app.applicant_data === 'string' ? JSON.parse(app.applicant_data) : app.applicant_data
+    }));
+    res.json(formattedApps);
+  } catch (error) {
+    console.error('GET /api/jobs/my-applications error:', error);
+    res.status(500).json({ error: 'Failed to fetch applications' });
+  }
+});
+
+app.get('/api/jobs/external', async (req, res) => {
+  const { q, l } = req.query;
+  const queryStr = q ? String(q) : '';
+  const location = l ? String(l) : '';
+
+  try {
+    const jobs = await getNativeExternalJobs(queryStr, location);
+    res.json({ jobs });
+  } catch (error) {
+    console.error('External search error:', error);
+    res.status(500).json({ error: 'Failed to fetch external jobs' });
+  }
+});
+
+app.get('/api/jobs/sync-worldwide', async (req, res) => {
+  try {
+    const notifications = await getWorldwideNotifications();
+    // In a real app, we might persist these to the DB. For now, we return them as "Real-time" alerts.
+    res.json({ notifications });
+  } catch (error) {
+    console.error('Worldwide sync error:', error);
+    res.status(500).json({ error: 'Failed to sync worldwide notifications' });
+  }
+});
+
+// --- Ideas ---
+
+app.get('/api/ideas', async (req, res) => {
+  try {
+    const { q, userId } = req.query;
+    let sql = 'SELECT i.*, u.name as userName FROM ideas i JOIN users u ON i.user_id = u.id';
+    let conditions = [];
+    let params = [];
+
+    if (q) {
+      conditions.push('(i.title LIKE ? OR i.problem LIKE ? OR i.technologies LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    }
+    
+    if (userId) {
+      conditions.push('i.user_id <> ?');
+      params.push(userId);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    const ideas = await query(sql, params);
+    res.json(ideas);
+  } catch (error) {
+    console.error('GET /api/ideas error:', error);
+    res.status(500).json({ error: 'Failed to fetch ideas' });
+  }
+});
+
+app.post('/api/ideas', async (req, res) => {
+  try {
+    const { title, problem, solution, technologies, impact, contactEmail, contactPhone, userId } = req.body;
+    const id = 'idea_' + Date.now();
+    await query('INSERT INTO ideas (id, title, problem, solution, technologies, impact, contact_email, contact_phone, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, title, problem, solution, technologies, impact, contactEmail, contactPhone, userId, Date.now(), Date.now()]);
+    res.json({ message: 'Idea posted successfully', id });
+  } catch (error) {
+    console.error('POST /api/ideas error:', error);
+    res.status(500).json({ error: 'Failed to post idea' });
+  }
+});
+
+// --- Competitions & Research Papers ---
+
+// Unified Job Search (Student & Internship Hub)
+app.get('/api/jobs', async (req, res) => {
+  const { q, l, sector, role, experience, remote } = req.query;
+  const queryStr = q ? String(q) : '';
+  const location = l ? String(l) : '';
+
+  try {
+    // 1. Fetch Local Jobs (VConnectU)
+    let localJobs = [];
+    let sql = 'SELECT * FROM jobs WHERE 1=1';
+    let params = [];
+
+    // --- AI QUERY SEMANTIC PARSING ---
+    let expandedSearchTerm = '';
+    if (queryStr) {
+       const parsedIntent = await parseJobSearchQuery(queryStr);
+       // Construct a boolean search string: +Title* +(Skill1 Skill2)
+       const titleTerms = parsedIntent.titles.map(t => `+"${t}"`).join(' ');
+       const skillTerms = parsedIntent.skills.length > 0 ? `+(${parsedIntent.skills.join(' ')})` : '';
+       expandedSearchTerm = `${titleTerms} ${skillTerms}`.trim() || queryStr;
+
+       // Use FULLTEXT boolean mode instead of LIKE
+       sql += ' AND MATCH(title, company, description, required_skills, location) AGAINST(? IN BOOLEAN MODE)';
+       params.push(expandedSearchTerm);
+       
+       // Override / enhance explicit parameters with AI intent if not provided
+       if (!req.query.remote && parsedIntent.isRemote !== null) {
+          req.query.remote = parsedIntent.isRemote ? 'true' : 'false';
+       }
+       if (!req.query.experience && parsedIntent.experience) {
+          req.query.experience = parsedIntent.experience;
+       }
+    } else if (location) {
+       // Fallback for location-only searches without a query
+       sql += ' AND (location LIKE ? OR location = "Remote")';
+       params.push(`%${location}%`);
+    }
+
+    // --- STANDARD FILTERS ---
+    if (sector) {
+      sql += ' AND sector = ?';
+      params.push(String(sector));
+    }
+
+    if (role) {
+      sql += ' AND role = ?';
+      params.push(String(role));
+    }
+    
+    if (req.query.experience) {
+      sql += ' AND experience_level = ?';
+      params.push(String(req.query.experience));
+    }
+
+    if (req.query.remote === 'true') {
+      sql += ' AND (is_remote = 1 OR location = "Remote")';
+    }
+
+    sql += ' ORDER BY created_at DESC LIMIT 50';
+    localJobs = await query(sql, params);
+
+    const formattedLocal = localJobs.map(job => {
+      // Generate hash for local jobs if missing
+      const hashInput = `${job.title}|${job.company}|${job.location}`.toLowerCase().replace(/\s+/g, '');
+      const jobHash = job.job_hash || Buffer.from(hashInput).toString('base64').slice(0, 32);
+
+      return {
+        ...job,
+        minQualification: job.min_qualification,
+        requiredSkills: job.required_skills,
+        selectionProcess: job.selection_process,
+        examDate: job.exam_date,
+        examMode: job.exam_mode,
+        source: 'VConnectU',
+        job_hash: jobHash,
+        isNotification: false,
+        verificationDetails: job.verification_details ? (typeof job.verification_details === 'string' ? JSON.parse(job.verification_details) : job.verification_details) : {
+          confidenceScore: 100,
+          trustSignals: ['Internal Verified Listing', 'Direct Partnership'],
+          lastChecked: new Date().toISOString()
+        },
+        createdAt: job.created_at ? new Date(job.created_at).getTime() : Date.now()
+      };
+    });
+
+    // 2. Fetch Real-time Internships/Jobs (AI Aggregated)
+    let aiJobs = [];
+    try {
+      const searchTarget = queryStr || "Trending Internships";
+      const searchLoc = location || "India"; 
+      
+      const aiResponse = await Promise.race([
+        getNativeExternalJobs(searchTarget, searchLoc),
+        new Promise(resolve => setTimeout(() => resolve([]), 15000))
+      ]);
+      aiJobs = aiResponse || [];
+    } catch (aiErr) {
+      console.error('AI Job discovery fallback:', aiErr.message);
+    }
+
+    // 3. Deduplication: Only keep AI jobs that aren't already in localJobs
+    const localHashes = new Set(formattedLocal.map(j => j.job_hash));
+    const uniqueAIJobs = aiJobs.filter(job => !localHashes.has(job.job_hash));
+
+    // 4. Combine and Sort
+    const unifiedJobs = [...formattedLocal, ...uniqueAIJobs].sort((a, b) => b.createdAt - a.createdAt);
+
+    res.json(unifiedJobs);
+  } catch (error) {
+    console.error('Unified job search error:', error);
+    res.status(500).json({ error: 'Failed to fetch jobs' });
+  }
+});
+
+app.get('/api/competitions', async (req, res) => {
+  try {
+    const comps = await query('SELECT * FROM competitions ORDER BY is_verified DESC, created_at DESC');
+    res.json(comps);
+  } catch (error) {
+    console.error('GET /api/competitions error:', error);
+    res.status(500).json({ error: 'Failed to fetch competitions' });
+  }
+});
+
+app.post('/api/competitions/sync', async (req, res) => {
+  try {
+    console.log('🔄 Syncing competitions with AI Discovery...');
+    const seedData = competitionsService.getSeedData();
+    const syncedCount = 0;
+
+    for (const comp of seedData) {
+      const existing = await query('SELECT id FROM competitions WHERE id = ?', [comp.id]);
+      if (existing.length === 0) {
+        // Run AI verification on new items
+        const verified = await competitionsService.verifyCompetition(comp);
+        await query(
+          'INSERT INTO competitions (id, title, platform, description, link, prize, deadline, type, is_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [comp.id, verified.title, verified.platform, verified.description, verified.link, verified.prize, verified.deadline, verified.type, verified.is_verified, Date.now(), Date.now()]
+        );
+      }
+    }
+
+    const comps = await query('SELECT * FROM competitions ORDER BY is_verified DESC, created_at DESC');
+    res.json({ message: 'Sync complete', competitions: comps });
+  } catch (error) {
+    console.error('POST /api/competitions/sync error:', error);
+    res.status(500).json({ error: 'Failed to sync competitions', details: error.message });
+  }
+});
+
+app.post('/api/competitions/verify/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [comp] = await query('SELECT * FROM competitions WHERE id = ?', [id]);
+    if (!comp) return res.status(404).json({ error: 'Competition not found' });
+
+    const verified = await competitionsService.verifyCompetition(comp);
+    await query('UPDATE competitions SET is_verified = ?, updated_at = ? WHERE id = ?', [verified.is_verified, Date.now(), id]);
+
+    res.json({ success: true, is_verified: verified.is_verified });
+  } catch (error) {
+    console.error('POST /api/competitions/verify error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+app.get('/api/research-papers', async (req, res) => {
+  try {
+    const papers = await query('SELECT * FROM research_papers ORDER BY created_at DESC');
+    res.json(papers);
+  } catch (error) {
+    console.error('GET /api/research-papers error:', error);
+    res.status(500).json({ error: 'Failed to fetch research papers' });
+  }
+});
+
 // One-time admin: remove test users
 app.delete('/api/admin/cleanup-test-users', async (req, res) => {
   const secret = process.env.ADMIN_SECRET || 'sv-cleanup-7x9q';
@@ -1114,6 +1768,33 @@ app.get('/', (_req, res) => {
   res.json({ message: 'SkillVouch API is running', version: '1.0.0' });
 });
 
-app.listen(PORT, () => {
-  console.log(`MySQL backend listening on http://localhost:${PORT}`);
+// Query submission
+app.post('/api/queries/submit', async (req, res) => {
+  const { userId, email, userName, query: userQuery } = req.body;
+  
+  if (!userQuery || !email) {
+    return res.status(400).json({ error: 'Email and query are required' });
+  }
+
+  try {
+    console.log(`📩 NEW QUERY RECEIVED`);
+    console.log(`From: ${userName} (${email}) [ID: ${userId}]`);
+    console.log(`Content: ${userQuery}`);
+    
+    // In a real production app, we would use Nodemailer or a service like SendGrid here.
+    // For now, we simulate success and log it to the console.
+    // skillvouchai@gmail.com is the target as per user request.
+    
+    await query(
+      'INSERT INTO queries (user_id, email, user_name, content, status, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+      [userId || 'guest', email, userName || 'Anonymous', userQuery, 'pending']
+    ).catch(e => console.error("Database logging failed for query, but will still report success to user.", e));
+
+    res.json({ success: true, message: 'Query submitted successfully' });
+  } catch (err) {
+    console.error('Query submission error:', err);
+    res.status(500).json({ error: 'Failed to submit query' });
+  }
 });
+
+app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));

@@ -1,10 +1,20 @@
 import { ChatMistralAI } from '@langchain/mistralai';
 
-const mistral = new ChatMistralAI({
-  model: 'mistral-small',
-  temperature: 0.3,
-  apiKey: process.env.MISTRAL_API_KEY,
-});
+let mistral = null;
+
+const getMistralClient = () => {
+  if (!mistral) {
+    if (!process.env.MISTRAL_API_KEY) {
+      throw new Error('MISTRAL_API_KEY is not defined in environment variables');
+    }
+    mistral = new ChatMistralAI({
+      model: 'mistral-small',
+      temperature: 0.3,
+      apiKey: process.env.MISTRAL_API_KEY,
+    });
+  }
+  return mistral;
+};
 
 const quizCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
@@ -135,9 +145,6 @@ const getQuestionTypesForLevel = (level) => {
 
   if (level === 'advanced' || level === 'expert') {
     baseTypes.push('Optimization / Trade-off Analysis');
-  }
-
-  if (level === 'expert') {
     baseTypes.push('Architecture / Strategy Decision');
   }
 
@@ -157,8 +164,8 @@ const validateQuizStructure = (quiz, skillName, level) => {
     throw new Error(`Quiz level mismatch: expected ${level}, got ${quiz.level}`);
   }
 
-  if (!Array.isArray(quiz.questions) || quiz.questions.length !== 10) {
-    throw new Error(`Invalid quiz: must have exactly 10 questions, got ${quiz.questions?.length || 0}`);
+  if (!Array.isArray(quiz.questions) || quiz.questions.length === 0) {
+    throw new Error(`Invalid quiz: must have at least one question, got ${quiz.questions?.length || 0}`);
   }
 
   const validQuestionTypes = getQuestionTypesForLevel(level);
@@ -249,8 +256,8 @@ export const generateSkillAssessmentQuiz = async (skillName, level, questionCoun
       return cachedQuiz;
     }
 
-    if (questionCount !== 10) {
-      throw new Error(`Only 10 questions are supported. Got: ${questionCount}`);
+    if (questionCount <= 0 || questionCount > 20) {
+      throw new Error(`Invalid question count. Requested: ${questionCount}. Must be between 1 and 20.`);
     }
 
     const timeLimits = getTimeLimits(level);
@@ -284,7 +291,8 @@ STRICT RULES (MANDATORY)
 9. No repeated question patterns.
 10. NO explanation text unless requested.
 11. Question types must NOT introduce skill leakage.
-12. If a question type is not suitable for the skill, SKIP it.
+12. Generate EXACTLY ${questionCount} questions.
+13. If a question type is not suitable for the skill, SKIP it.
 
 -------------------------
 DIFFICULTY-BASED SCENARIO REQUIREMENTS
@@ -320,7 +328,7 @@ SCENARIO DESIGN REQUIREMENTS
 QUIZ STRUCTURE
 -------------------------
 
-Generate EXACTLY 10 questions.
+Generate EXACTLY ${questionCount} questions.
 
 Each question must include:
 - questionType
@@ -345,7 +353,7 @@ OUTPUT FORMAT (STRICT JSON)
 {
   "skill": "${skillName}",
   "level": "${level}",
-  "totalQuestions": 10,
+  "totalQuestions": ${questionCount},
   "timePerQuestionSeconds": ${timeLimits.perQuestion},
   "totalTimeSeconds": ${timeLimits.total},
   "questions": [
@@ -379,9 +387,9 @@ Before outputting:
 - If any mismatch exists, REWRITE the question.
 - Output ONLY valid JSON. No markdown. No extra text.
 
-Generate exactly 10 challenging scenario-based questions covering the appropriate question types, ensuring code snippets and expected outputs are included where relevant:`;
+Generate exactly ${questionCount} challenging scenario-based questions covering the appropriate question types, ensuring code snippets and expected outputs are included where relevant:`;
 
-    const response = await mistral.invoke(prompt);
+    const response = await getMistralClient().invoke(prompt);
     const content = response.content;
 
     let cleanContent = content.trim();
